@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, OrderStatus } from '../types';
-import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, Gauge, CreditCard, ArrowRight, Eye } from 'lucide-react';
+import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, CreditCard, ArrowRight, Eye } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface DashboardViewProps {
@@ -192,10 +192,6 @@ export default function DashboardView({
                   <div className="flex items-center gap-1.5">
                     <Calendar className="w-3.5 h-3.5 text-slate-500" />
                     <span>{order.date}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Gauge className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="font-mono">{order.odo.toLocaleString()} კმ</span>
                   </div>
                 </div>
 

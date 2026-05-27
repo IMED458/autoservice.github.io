@@ -1,64 +1,133 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
-export type Role = 'admin' | 'mechanic';
+export type Role = 'super_admin' | 'admin' | 'mechanic';
 
 export interface User {
   id: string;
   firstName: string;
   lastName: string;
   username: string;
-  passwordHash: string; // MD5/SHA256 mock hash
+  passwordHash: string;
   role: Role;
+  enabledModules?: string[]; // e.g. ['shop', 'day_closing', 'reports']
   createdAt: string;
 }
 
-export type OrderStatus = 'new' | 'pending' | 'completed'; // ახალი, პროცესშია, დასრულებულია
-export type PaymentStatus = 'paid' | 'unpaid'; // გადახდილია, გადაუხდელია
+export type OrderStatus = 'new' | 'pending' | 'completed';
+export type PaymentStatus = 'paid' | 'unpaid';
 
 export interface CarServiceOrder {
   id: string;
-  date: string; // YYYY-MM-DD
-  carBrand: string; // მანქანის მარკა
-  carNumber: string; // სახელმწიფო ნომერი
-  clientFullName: string; // კლიენტის სახელი და გვარი
-  clientPhone: string; // კლიენტის ტელეფონი
-  problemDescription: string; // პრობლემის აღწერა
+  date: string;
+  carBrand: string;
+  carNumber: string;
+  clientFullName: string;
+  clientPhone: string;
+  problemDescription: string;
   status: OrderStatus;
-  odo: number; // ODO / გარბენი
   paymentStatus: PaymentStatus;
-  paidTo?: string; // ვისთან გადაიხადა (მაგ. 'ზვიადი' ან სხვა პირი)
-  createdBy: string; // User ID
+  paidTo?: string;
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
 }
 
-export type ServiceType = string; // დინამიური გახდა
+export type ServiceType = string;
 
 export interface ServiceTypeConfig {
-  id: string; // e.g. 'diagnostic', 'electromechanics'
-  name: string; // e.g. 'დიაგნოსტიკა'
-  defaultPrice: number; // e.g. 100
-  percentageReward: number; // e.g. 50 (for 50%), or 0 if flat
-  flatReward: number; // e.g. 30 (for flat Diagnostic Reward)
-  rewardType: 'percentage' | 'flat'; // reward calculation mode
+  id: string;
+  name: string;
+  percentageReward: number;
+  flatReward: number;
+  rewardType: 'percentage' | 'flat';
+  employeeRewards?: Record<string, {
+    rewardType: 'percentage' | 'flat';
+    percentageReward: number;
+    flatReward: number;
+  }>;
 }
 
 export interface ServiceItem {
   id: string;
   orderId: string;
-  serviceType: string; // config id
-  description: string; // შესრულებული სამუშაოს აღწერა
-  price: number; // ფასი
-  mechanicId: string; // მომსახურების შემსრულებელი ხელოსნის ID
-  mechanicEarning: number; // ავტომატურად დათვლილი გამომუშავება
+  serviceType: string;
+  description: string;
+  price: number;
+  mechanicId: string;
+  mechanicEarning: number;
   createdAt: string;
 }
 
-// Translations and helpers
+export interface Product {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  brand: string;
+  description: string;
+  unit: string;
+  purchasePrice: number;
+  salePrice: number;
+  stock: number;
+  minStock: number;
+  photoUrl: string;
+  status: 'active' | 'inactive';
+  soldQuantity: number;
+  createdAt: string;
+}
+
+export interface ProductSale {
+  id: string;
+  clientName: string;
+  clientPhone: string;
+  carBrand: string;
+  carNumber: string;
+  date: string;
+  totalAmount: number;
+  discount: number;
+  finalAmount: number;
+  paymentStatus: PaymentStatus;
+  paymentMethod: 'cash' | 'transfer';
+  items: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    purchasePrice: number;
+    salePrice: number;
+  }[];
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface DailyClosing {
+  id: string;
+  date: string;
+  startTime: string;
+  closingTime: string;
+  totalReceived: number;
+  totalOutstanding: number;
+  productSalesCount: number;
+  servicesCount: number;
+  productRevenue: number;
+  serviceRevenue: number;
+  productProfit: number;
+  totalCash: number;
+  totalCard: number;
+  totalTbc: number;
+  totalBog: number;
+  totalTransfer: number;
+  itemsSold: any[];
+  servicesDone: any[];
+  closedBy: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface CarBrand {
+  id: string;
+  name: string;
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
+  super_admin: 'სუპერ ადმინისტრატორი',
   admin: 'ადმინისტრატორი',
   mechanic: 'ხელოსანი',
 };
@@ -74,56 +143,45 @@ export const PAYMENT_STATUS_LABELS: Record<PaymentStatus, string> = {
   unpaid: 'გადაუხდელია',
 };
 
-// Default configs in case none are in localStorage
 export const DEFAULT_SERVICE_CONFIGS: ServiceTypeConfig[] = [
-  {
-    id: 'diagnostic',
-    name: 'დიაგნოსტიკა',
-    defaultPrice: 100,
-    percentageReward: 0,
-    flatReward: 30,
-    rewardType: 'flat',
-  },
-  {
-    id: 'electromechanics',
-    name: 'ელექტრო მექანიკა',
-    defaultPrice: 80,
-    percentageReward: 50,
-    flatReward: 0,
-    rewardType: 'percentage',
-  },
-  {
-    id: 'other',
-    name: 'სხვა სამუშაოები',
-    defaultPrice: 50,
-    percentageReward: 50,
-    flatReward: 0,
-    rewardType: 'percentage',
-  },
+  { id: 'diagnostic', name: 'დიაგნოსტიკა', percentageReward: 0, flatReward: 30, rewardType: 'flat' },
+  { id: 'electromechanics', name: 'ელექტრო მექანიკა', percentageReward: 50, flatReward: 0, rewardType: 'percentage' },
+  { id: 'other', name: 'სხვა სამუშაოები', percentageReward: 50, flatReward: 0, rewardType: 'percentage' },
 ];
 
-/**
- * Calculates mechanic earnings automatically based on dynamic configs or defaults.
- */
+export const DEFAULT_CAR_BRANDS: CarBrand[] = [
+  { id: 'cb-mb', name: 'MERCEDES-BENZ' },
+  { id: 'cb-daf', name: 'DAF' },
+  { id: 'cb-scania', name: 'SCANIA' },
+  { id: 'cb-man', name: 'MAN' },
+  { id: 'cb-iveco', name: 'IVECO' },
+  { id: 'cb-volvo', name: 'VOLVO' },
+  { id: 'cb-renault', name: 'RENAULT' },
+];
+
 export function calculateMechanicEarning(
   serviceType: string,
   price: number,
-  configs?: ServiceTypeConfig[]
+  configs?: ServiceTypeConfig[],
+  employeeId?: string
 ): number {
   const activeConfigs = configs || DEFAULT_SERVICE_CONFIGS;
   const conf = activeConfigs.find((c) => c.id === serviceType);
   if (conf) {
-    if (conf.rewardType === 'flat') {
-      return conf.flatReward;
-    } else {
-      return Number(((price * conf.percentageReward) / 100).toFixed(2));
+    if (employeeId && conf.employeeRewards?.[employeeId]) {
+      const er = conf.employeeRewards[employeeId];
+      return er.rewardType === 'flat'
+        ? er.flatReward
+        : Number(((price * er.percentageReward) / 100).toFixed(2));
     }
+    return conf.rewardType === 'flat'
+      ? conf.flatReward
+      : Number(((price * conf.percentageReward) / 100).toFixed(2));
   }
+  if (serviceType === 'diagnostic') return 30;
+  return Number((price * 0.5).toFixed(2));
+}
 
-  // Fallback defaults
-  if (serviceType === 'diagnostic') {
-    return 30; // 30 ლარი flat
-  } else {
-    return Number((price * 0.5).toFixed(2)); // 50%
-  }
+export function hasModule(user: User, mod: string): boolean {
+  return user.role === 'super_admin' || (user.enabledModules ?? []).includes(mod);
 }
