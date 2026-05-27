@@ -54,19 +54,24 @@ export default function App() {
     initDone.current = true;
 
     const init = async () => {
-      const usersSnap = await getDocs(collection(db, 'users'));
-      if (usersSnap.empty) {
-        const batch = writeBatch(db);
-        INITIAL_USERS.forEach(u => batch.set(doc(db, 'users', u.id), u));
-        INITIAL_ORDERS.forEach(o => batch.set(doc(db, 'orders', o.id), o));
-        INITIAL_SERVICES.forEach(s => batch.set(doc(db, 'services', s.id), s));
-        DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
-        DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
-        await batch.commit();
+      try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        if (usersSnap.empty) {
+          const batch = writeBatch(db);
+          INITIAL_USERS.forEach(u => batch.set(doc(db, 'users', u.id), u));
+          INITIAL_ORDERS.forEach(o => batch.set(doc(db, 'orders', o.id), o));
+          INITIAL_SERVICES.forEach(s => batch.set(doc(db, 'services', s.id), s));
+          DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
+          DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
+          await batch.commit();
+        }
+      } catch (e) {
+        console.error('Firestore init error:', e);
+      } finally {
+        setInitialized(true);
       }
-      setInitialized(true);
     };
-    init().catch(console.error);
+    init();
   }, []);
 
   // Real-time Firestore listeners (start after init)
