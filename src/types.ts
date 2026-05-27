@@ -53,6 +53,8 @@ export interface ServiceItem {
   price: number;
   mechanicId: string;
   mechanicEarning: number;
+  coMechanicId?: string;
+  coMechanicEarning?: number;
   createdAt: string;
 }
 

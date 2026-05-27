@@ -110,9 +110,10 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
   }
 
   const mechanicPerformances: MechanicPerformance[] = mechanics.map((mech) => {
-    const mySrvs = periodServices.filter((s) => s.mechanicId === mech.id);
-    const totalWorksCost = mySrvs.reduce((sum, s) => sum + s.price, 0);
-    const totalEarned = mySrvs.reduce((sum, s) => sum + s.mechanicEarning, 0);
+    const mySrvs = periodServices.filter((s) => s.mechanicId === mech.id || s.coMechanicId === mech.id);
+    const totalWorksCost = mySrvs.filter(s => s.mechanicId === mech.id).reduce((sum, s) => sum + s.price, 0);
+    const totalEarned = mySrvs.reduce((sum, s) =>
+      sum + (s.mechanicId === mech.id ? s.mechanicEarning : (s.coMechanicEarning || 0)), 0);
 
     return {
       id: mech.id,
@@ -160,10 +161,10 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
 
     orderSrvList.forEach((srv) => {
       paidToSharesRecords[paidToName].totalReceived += srv.price;
-      // System/Admin share = Total Service Price - Mechanic reward (which equals exactly rest 50%)
-      const systemShare = srv.price - srv.mechanicEarning;
+      const totalMechPay = srv.mechanicEarning + (srv.coMechanicEarning || 0);
+      const systemShare = srv.price - totalMechPay;
       paidToSharesRecords[paidToName].systemWalletShare += systemShare;
-      paidToSharesRecords[paidToName].handymanPaidOut += srv.mechanicEarning;
+      paidToSharesRecords[paidToName].handymanPaidOut += totalMechPay;
     });
   });
 

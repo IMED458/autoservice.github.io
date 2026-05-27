@@ -27,8 +27,13 @@ export default function MechanicPanelView({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  // Find all service entries assigned to this logged-in mechanic
-  const mechanicServices = services.filter((s) => s.mechanicId === currentUser.id);
+  // Find all service entries where this mechanic is primary or co-mechanic
+  const mechanicServices = services.filter((s) =>
+    s.mechanicId === currentUser.id || s.coMechanicId === currentUser.id
+  );
+
+  const getEarning = (s: typeof services[0]) =>
+    s.mechanicId === currentUser.id ? s.mechanicEarning : (s.coMechanicEarning || 0);
 
   // Helper to safely parse localized "YYYY-MM-DD" style dates without timezone shifts
   const parseLocalDate = (dateStr: string) => {
@@ -62,7 +67,7 @@ export default function MechanicPanelView({
   let weekEarnings = 0;
   let monthEarnings = 0;
   let yearEarnings = 0;
-  const totalLifetimeEarnings = mechanicServices.reduce((sum, s) => sum + s.mechanicEarning, 0);
+  const totalLifetimeEarnings = mechanicServices.reduce((sum, s) => sum + getEarning(s), 0);
 
   mechanicServices.forEach((srv) => {
     const orderObj = orders.find((o) => o.id === srv.orderId);
@@ -73,23 +78,22 @@ export default function MechanicPanelView({
 
     // 1. Weekly Earnings: Monday through Sunday
     if (orderDate >= mondayLocal && orderDate <= sundayLocal) {
-      weekEarnings += srv.mechanicEarning;
+      weekEarnings += getEarning(srv);
     }
 
     // 2. Monthly Earnings: Entire current month
     if (orderDate.getFullYear() === currentYear && orderDate.getMonth() === currentMonth) {
-      monthEarnings += srv.mechanicEarning;
+      monthEarnings += getEarning(srv);
     }
 
     // 3. Yearly Earnings: Entire current year
     if (orderDate.getFullYear() === currentYear) {
-      yearEarnings += srv.mechanicEarning;
+      yearEarnings += getEarning(srv);
     }
   });
 
   // Filter service items based on date query
   const filteredServices = mechanicServices.filter((srv) => {
-    // Extract date from service order
     const orderObj = orders.find((o) => o.id === srv.orderId);
     if (!orderObj) return false;
 
@@ -100,7 +104,7 @@ export default function MechanicPanelView({
   });
 
   // Calculate earnings of matching filtered services
-  const filteredEarningsSum = filteredServices.reduce((sum, s) => sum + s.mechanicEarning, 0);
+  const filteredEarningsSum = filteredServices.reduce((sum, s) => sum + getEarning(s), 0);
 
   const getServiceLabel = (typeId: string) => {
     const conf = serviceConfigs.find((c) => c.id === typeId);
@@ -251,7 +255,7 @@ export default function MechanicPanelView({
           {mechanicOrdersFiltered.map((order) => {
             // My services associated within this specific order
             const myOrderServices = filteredServices.filter((s) => s.orderId === order.id);
-            const myEarnOnThisOrder = myOrderServices.reduce((sum, s) => sum + s.mechanicEarning, 0);
+            const myEarnOnThisOrder = myOrderServices.reduce((sum, s) => sum + getEarning(s), 0);
 
             return (
               <motion.div
@@ -282,7 +286,7 @@ export default function MechanicPanelView({
                   {myOrderServices.map((srv) => (
                     <div key={srv.id} className="text-[11px] text-slate-300 flex justify-between gap-2">
                       <span>• {getServiceLabel(srv.serviceType)} — {srv.description}</span>
-                      <span className="text-cyan-400 font-mono font-bold">+{srv.mechanicEarning} ₾</span>
+                      <span className="text-cyan-400 font-mono font-bold">+{getEarning(srv)} ₾</span>
                     </div>
                   ))}
                 </div>
