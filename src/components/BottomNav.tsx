@@ -23,6 +23,7 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
   } else {
     tabs.push({ id: 'all-orders', label: 'დავალებები', icon: ListTodo });
     tabs.push({ id: 'mechanic-dashboard', label: 'ჩემი გვერდი', icon: Wrench });
+    tabs.push({ id: 'history', label: 'ისტორია', icon: History });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
   }

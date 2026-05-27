@@ -299,6 +299,7 @@ export default function App() {
                 <>
                   {currentTab === 'mechanic-dashboard' && <MechanicPanelView orders={orders} services={services} currentUser={currentUser} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
                   {currentTab === 'all-orders' && <DashboardView orders={orders} currentUser={currentUser} onSelectOrder={handleSelectOrder} onOpenAddOrder={handleOpenAddOrder} />}
+                  {currentTab === 'history' && <HistoryView orders={orders} services={services} mechanics={mechanicsList} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
                   {currentTab === 'shop' && hasModule(currentUser, 'shop') && <StoreView currentUser={currentUser} orders={orders} services={services} />}
                   {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && <DayClosingSection orders={orders} services={services} productSales={productSales} dailyClosings={dailyClosings} currentUser={currentUser} onConfirmCloseDay={handleConfirmCloseDay} />}
                 </>
