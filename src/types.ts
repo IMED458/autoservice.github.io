@@ -74,6 +74,14 @@ export interface Product {
   createdAt: string;
 }
 
+export interface ProductSaleItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  purchasePrice: number;
+  salePrice: number;
+}
+
 export interface ProductSale {
   id: string;
   clientName: string;
@@ -85,15 +93,32 @@ export interface ProductSale {
   discount: number;
   finalAmount: number;
   paymentStatus: PaymentStatus;
-  paymentMethod: 'cash' | 'transfer';
-  items: {
-    productId: string;
-    productName: string;
-    quantity: number;
-    purchasePrice: number;
-    salePrice: number;
-  }[];
+  paymentMethod: 'cash' | 'card' | 'tbc' | 'bog' | 'transfer' | 'mixed';
+  mixedPaymentDetails?: { cash: number; card: number; tbc: number; bog: number; transfer: number };
+  items: ProductSaleItem[];
   createdBy: string;
+  createdAt: string;
+}
+
+export interface InventoryMovement {
+  id: string;
+  productId: string;
+  productName: string;
+  type: 'refill' | 'sale' | 'adjustment';
+  quantity: number;
+  purchasePrice: number;
+  date: string;
+  note: string;
+  operatorName: string;
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  userId: string;
+  userFullName: string;
+  action: string;
+  details: string;
   createdAt: string;
 }
 

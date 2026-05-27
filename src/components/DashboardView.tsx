@@ -50,7 +50,7 @@ export default function DashboardView({
   return (
     <div className="max-w-lg mx-auto p-4 pb-24 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
       {/* Admin Action Block */}
-      {currentUser.role === 'admin' && (
+      {(currentUser.role === 'admin' || currentUser.role === 'super_admin') && (
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}

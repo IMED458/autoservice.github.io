@@ -16,10 +16,11 @@ interface OrderDetailsViewProps {
   serviceConfigs: ServiceTypeConfig[];
   onSaveTransaction: (orderId: string, updatedOrder: CarServiceOrder, updatedServices: ServiceItem[]) => void;
   onBack: () => void;
+  onDeleteOrder?: (orderId: string) => void;
 }
 
 export default function OrderDetailsView({
-  order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack,
+  order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack, onDeleteOrder,
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
   const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin';
@@ -128,7 +129,17 @@ export default function OrderDetailsView({
           className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-xl cursor-pointer">
           <ArrowLeft className="w-3.5 h-3.5" /> უკან
         </button>
-        <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
+          {currentUser.role === 'super_admin' && onDeleteOrder && (
+            <button
+              onClick={() => { if (confirm('ნამდვილად წაიშალოს ეს დავალება? (ყველა სერვისი წაიშლება)')) onDeleteOrder(order.id); }}
+              className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-red-950/20 border border-red-500/20 px-2.5 py-1.5 rounded-xl cursor-pointer"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> წაშლა
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Main Order Card */}

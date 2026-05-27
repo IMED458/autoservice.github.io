@@ -21,7 +21,7 @@ import HistoryView from './components/HistoryView';
 import EmployeesView from './components/EmployeesView';
 import ReportsView from './components/ReportsView';
 import MechanicPanelView from './components/MechanicPanelView';
-import ShopView from './components/ShopView';
+import StoreView from './components/StoreView';
 import DayClosingSection from './components/DayClosingSection';
 import SettingsView from './components/SettingsView';
 
@@ -225,6 +225,15 @@ export default function App() {
     await setDoc(doc(db, 'dailyClosings', id), c);
   };
 
+  const handleDeleteOrder = async (orderId: string) => {
+    const batch = writeBatch(db);
+    batch.delete(doc(db, 'orders', orderId));
+    services.filter(s => s.orderId === orderId).forEach(s => batch.delete(doc(db, 'services', s.id)));
+    await batch.commit();
+    setActiveView('regular-tab');
+    setCurrentTab('dashboard');
+  };
+
   if (!initialized) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
@@ -269,6 +278,7 @@ export default function App() {
                 serviceConfigs={serviceConfigs}
                 onSaveTransaction={handleSaveOrderTransaction}
                 onBack={() => setActiveView('regular-tab')}
+                onDeleteOrder={handleDeleteOrder}
               />
             </motion.div>
           ) : (
@@ -279,7 +289,7 @@ export default function App() {
                   {currentTab === 'history' && <HistoryView orders={orders} services={services} mechanics={mechanicsList} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
                   {currentTab === 'employees' && <EmployeesView users={users} currentUser={currentUser} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />}
                   {currentTab === 'reports' && <ReportsView orders={orders} services={services} mechanics={mechanicsList} allUsers={users} />}
-                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <ShopView products={products} orders={orders} productSales={productSales} dailyClosings={dailyClosings} services={services} currentUser={currentUser} onAddProduct={handleAddProduct} onEditProduct={handleEditProduct} onDeleteProduct={handleDeleteProduct} onRefillStock={handleRefillStock} onAddSale={handleAddSale} onConfirmCloseDay={handleConfirmCloseDay} />}
+                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <StoreView currentUser={currentUser} orders={orders} services={services} />}
                   {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && <DayClosingSection orders={orders} services={services} productSales={productSales} dailyClosings={dailyClosings} currentUser={currentUser} onConfirmCloseDay={handleConfirmCloseDay} />}
                   {currentTab === 'settings' && <SettingsView serviceConfigs={serviceConfigs} carBrands={carBrands} users={users} currentUser={currentUser} onSaveServiceConfigs={handleSaveServiceConfigs} onSaveCarBrands={handleSaveCarBrands} onUpdateUser={handleUpdateUser} />}
                   {currentTab === 'earnings' && <MechanicPanelView orders={orders} services={services} currentUser={currentUser} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
@@ -289,7 +299,7 @@ export default function App() {
                 <>
                   {currentTab === 'mechanic-dashboard' && <MechanicPanelView orders={orders} services={services} currentUser={currentUser} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
                   {currentTab === 'all-orders' && <DashboardView orders={orders} currentUser={currentUser} onSelectOrder={handleSelectOrder} onOpenAddOrder={handleOpenAddOrder} />}
-                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <ShopView products={products} orders={orders} productSales={productSales} dailyClosings={dailyClosings} services={services} currentUser={currentUser} onAddProduct={handleAddProduct} onEditProduct={handleEditProduct} onDeleteProduct={handleDeleteProduct} onRefillStock={handleRefillStock} onAddSale={handleAddSale} onConfirmCloseDay={handleConfirmCloseDay} />}
+                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <StoreView currentUser={currentUser} orders={orders} services={services} />}
                   {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && <DayClosingSection orders={orders} services={services} productSales={productSales} dailyClosings={dailyClosings} currentUser={currentUser} onConfirmCloseDay={handleConfirmCloseDay} />}
                 </>
               )}

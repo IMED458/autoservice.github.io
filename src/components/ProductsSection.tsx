@@ -1,7 +1,6 @@
-// ფაილი მდებარეობს: /src/components/ProductsSection.tsx
 import React, { useState } from 'react';
 import { Product, Role } from '../types';
-import { Plus, Edit3, Trash2, RefreshCw, X, Sparkles, Search } from 'lucide-react';
+import { Plus, Edit3, Trash2, ArrowUpRight, TrendingUp, Sparkles, Image, RefreshCw, AlertTriangle, Eye, X, Check, Search, Filter } from 'lucide-react';
 
 interface ProductsSectionProps {
   products: Product[];
@@ -20,17 +19,26 @@ export default function ProductsSection({
   onDeleteProduct,
   onRefillStock,
 }: ProductsSectionProps) {
+  // Filters & Search
   const [search, setSearch] = useState('');
   const [selectedCat, setSelectedCat] = useState('ყველა');
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all');
+
+  // Modal active states
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  
+  // Refill state
   const [refillTarget, setRefillTarget] = useState<Product | null>(null);
   const [refillQuantity, setRefillQuantity] = useState<number>(0);
   const [refillPrice, setRefillPrice] = useState<number>(0);
   const [refillNote, setRefillNote] = useState('მარაგის დაგეგმილი შევსება და საწყობის განახლება');
 
-  // პროდუქტის დამატების ველები
+  // Photo full preview states
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [previewPhotoError, setPreviewPhotoError] = useState(false);
+
+  // Form states for Add / Edit product
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState('ზეთები / ფილტრები');
@@ -43,19 +51,27 @@ export default function ProductsSection({
   const [minStock, setMinStock] = useState<number>(5);
   const [photoUrl, setPhotoUrl] = useState('');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
+
+  // Custom Category states
   const [isCustomCategory, setIsCustomCategory] = useState(false);
+  const [customCategory, setCustomCategory] = useState('');
 
+  // Perms check: ONLY Super Admin can do absolute overrides, edit closed states, delete catalog items
+  // Manager can add, edit, or fill. Cashier has POS only. Let's trace role
   const isPrivileged = ['super_admin', 'admin', 'manager'].includes(currentUser.role);
+  const isSuper = currentUser.role === 'super_admin';
 
+  // Categories list
   const categories = ['ყველა', ...Array.from(new Set(products.map((p) => p.category)))];
 
+  // Filters logic
   const filteredProducts = products.filter((p) => {
     const matchesSearch =
       p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.code.toLowerCase().includes(search.toLowerCase()) ||
       p.brand.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = selectedCat === 'ყველა' || p.category === selectedCat;
-
+    
     let matchesStock = true;
     if (stockFilter === 'low') {
       matchesStock = p.stock > 0 && p.stock <= p.minStock;
@@ -67,6 +83,7 @@ export default function ProductsSection({
   });
 
   const handleOpenAdd = () => {
+    // clear fields
     setCode(`P-${100 + products.length + 1}`);
     setName('');
     setCategory('ზეთები / ფილტრები');
@@ -79,7 +96,9 @@ export default function ProductsSection({
     setMinStock(5);
     setPhotoUrl('');
     setStatus('active');
+    
     setIsCustomCategory(false);
+    setCustomCategory('');
     setEditingProduct(null);
     setShowAddModal(true);
   };
@@ -98,12 +117,16 @@ export default function ProductsSection({
     setMinStock(p.minStock);
     setPhotoUrl(p.photoUrl);
     setStatus(p.status);
+
     setIsCustomCategory(false);
+    setCustomCategory('');
     setShowAddModal(true);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmitProductForm = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!name.trim()) return;
+
     const payload = {
       code: code.trim().toUpperCase(),
       name: name.trim(),
@@ -124,73 +147,197 @@ export default function ProductsSection({
     } else {
       onAddProduct(payload);
     }
+
     setShowAddModal(false);
+    setEditingProduct(null);
   };
 
-  const handleRefillSubmit = (e: React.FormEvent) => {
+  const handleConfirmRefill = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!refillTarget) return;
-    onRefillStock(refillTarget.id, refillQuantity, refillPrice, refillNote);
+    if (!refillTarget || refillQuantity <= 0) return;
+
+    onRefillStock(refillTarget.id, refillQuantity, refillPrice, refillNote.trim());
     setRefillTarget(null);
+    setRefillQuantity(0);
+    setRefillPrice(0);
+  };
+
+  const handleOpenRefill = (p: Product) => {
+    setRefillTarget(p);
+    setRefillQuantity(10);
+    setRefillPrice(p.purchasePrice);
+    setRefillNote('საცავის მარაგის დაგეგმილი შევსება და კორექტირება');
   };
 
   return (
     <div className="space-y-4 font-sans text-xs">
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-900 border border-slate-800 p-3 rounded-xl">
+      {/* Search & Statistics Overview Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-slate-900 border border-slate-800 p-3 rounded-xl shadow">
         <div className="md:col-span-2 relative flex items-center">
           <Search className="absolute left-3 w-4 h-4 text-slate-500" />
           <input
+            id="cat-product-search"
             type="text"
             placeholder="მოძებნე სახელით, ბრენდით, კოდით..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-slate-100"
+            className="w-full bg-slate-950 border border-slate-850 rounded-lg pl-9 pr-3 py-1.5 font-bold text-slate-100 placeholder-slate-600 focus:outline-none"
           />
         </div>
-        <select value={selectedCat} onChange={(e) => setSelectedCat(e.target.value)} className="bg-slate-950 border border-slate-800 rounded-lg text-slate-300 focus:outline-none px-2 font-bold">
-          {categories.map((c) => <option key={c} value={c}>{c === 'ყველა' ? '📁 ყველა კატეგორია' : `📁 ${c}`}</option>)}
+
+        <select
+          id="cat-product-category-sel"
+          value={selectedCat}
+          onChange={(e) => setSelectedCat(e.target.value)}
+          className="bg-slate-950 border border-slate-850 rounded-lg p-1 px-2.5 text-slate-300 font-bold focus:outline-none"
+        >
+          {categories.map((cat) => (
+            <option key={cat} value={cat}>
+              {cat === 'ყველა' ? '📁 ყველა კატეგორია' : `📁 ${cat}`}
+            </option>
+          ))}
         </select>
-        <div className="flex bg-slate-950 p-1 rounded-lg border border-slate-800">
-          <button onClick={() => setStockFilter('all')} className={`flex-1 text-[10px] font-bold rounded ${stockFilter === 'all' ? 'bg-amber-400 text-slate-950 px-2' : 'text-slate-400'}`}>ყველა</button>
-          <button onClick={() => setStockFilter('low')} className={`flex-1 text-[10px] font-bold rounded ${stockFilter === 'low' ? 'bg-amber-400 text-slate-950 px-2' : 'text-slate-400'}`}>მცირე</button>
+
+        <div className="flex gap-1 bg-slate-950 p-1 border border-slate-850 rounded-lg select-none">
+          <button
+            onClick={() => setStockFilter('all')}
+            className={`flex-1 text-[10px] font-bold py-1 px-1.5 rounded transition ${
+              stockFilter === 'all' ? 'bg-amber-500/15 text-amber-400' : 'text-slate-500'
+            }`}
+          >
+            ყველა
+          </button>
+          <button
+            id="stock-filter-low"
+            onClick={() => setStockFilter('low')}
+            className={`flex-1 text-[10px] font-bold py-1 px-1.5 rounded transition ${
+              stockFilter === 'low' ? 'bg-red-500/15 text-red-400' : 'text-slate-500'
+            }`}
+          >
+            მცირე მარაგი
+          </button>
+          <button
+            id="stock-filter-out"
+            onClick={() => setStockFilter('out')}
+            className={`flex-1 text-[10px] font-bold py-1 px-1.5 rounded transition ${
+              stockFilter === 'out' ? 'bg-rose-500/20 text-rose-500' : 'text-slate-500'
+            }`}
+          >
+            ნული
+          </button>
         </div>
       </div>
 
-      <div className="flex justify-between items-center bg-slate-950/40 p-3 rounded-xl border border-slate-800">
-        <span className="text-slate-400">ჯამური ასორტიმენტი: <b>{products.length} პროდუქტი</b></span>
+      {/* Control command button block & summary metrics */}
+      <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+        <div className="flex flex-wrap gap-4 text-slate-400 font-bold">
+          <span>
+            სულ: <b className="text-slate-200 font-black">{products.length}</b> პროდუქტი
+          </span>
+          <span>
+            მცირე მარაგი:{' '}
+            <b className="text-red-400 font-black">
+              {products.filter((p) => p.stock > 0 && p.stock <= p.minStock).length}
+            </b>
+          </span>
+          <span>
+            ამოწურული:{' '}
+            <b className="text-rose-500 font-black">{products.filter((p) => p.stock === 0).length}</b>
+          </span>
+        </div>
+
         {isPrivileged && (
-          <button onClick={handleOpenAdd} className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded-lg flex items-center gap-1.5 cursor-pointer">
+          <button
+            id="add-new-product-btn"
+            onClick={handleOpenAdd}
+            className="w-full sm:w-auto px-4 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black tracking-wide rounded-lg cursor-pointer flex items-center justify-center gap-1.5 shadow"
+          >
             <Plus className="w-4 h-4 font-black" /> პროდუქტის დამატება
           </button>
         )}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      {/* Grid displays */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
         {filteredProducts.map((p) => {
-          const isLow = p.stock <= p.minStock && p.stock > 0;
           const isOut = p.stock === 0;
+          const isLow = p.stock > 0 && p.stock <= p.minStock;
 
           return (
-            <div key={p.id} className={`bg-slate-900 border rounded-xl overflow-hidden p-3 flex flex-col justify-between ${isOut ? 'border-red-500/25' : isLow ? 'border-amber-500/25' : 'border-slate-800'}`}>
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold text-slate-100 uppercase">{p.name}</h4>
-                <div className="flex justify-between text-[10px] text-slate-500">
-                  <span>SKU: {p.code}</span>
-                  {p.brand && <span className="text-amber-500 font-mono italic">{p.brand}</span>}
+            <div
+              key={p.id}
+              className={`bg-slate-900 border rounded-xl overflow-hidden flex flex-col justify-between transition-all ${
+                isOut
+                  ? 'border-red-500/20 shadow-red-500/5 shadow-md'
+                  : isLow
+                  ? 'border-amber-500/20 shadow-amber-500/5 shadow-md'
+                  : 'border-slate-800/80 shadow'
+              }`}
+            >
+              {/* Product Info Card */}
+              <div className="p-3.5 space-y-3 flex-1 flex flex-col justify-between">
+                <div>
+                  <h4 className="text-[12px] font-bold text-slate-100 uppercase tracking-wide leading-snug">{p.name}</h4>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-[9.5px] text-slate-500 font-mono">კოდი: {p.code}</span>
+                    {p.brand && (
+                      <span className="text-[9.5px] text-slate-450 italic bg-slate-950 px-1.5 py-0.5 rounded border border-slate-850">
+                        {p.brand}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="bg-slate-950 p-2 rounded-lg text-center flex justify-between font-bold">
-                  <span className="text-slate-400">საწყისი ნაშთი:</span>
-                  <span className={isOut ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-emerald-400'}>{p.stock} {p.unit}</span>
+
+                <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850/80 flex items-center justify-between select-none">
+                  <span className="text-[10px] text-slate-400 font-sans font-medium">ნაშთი მარაგში:</span>
+                  <span
+                    className={`font-mono text-[13px] font-black flex items-center gap-1 ${
+                      isOut ? 'text-red-500' : isLow ? 'text-amber-500' : 'text-emerald-400'
+                    }`}
+                  >
+                    {p.stock} {p.unit}
+                    {isLow && (
+                      <span className="text-[8px] bg-red-950/60 text-red-400 px-1.5 py-0.5 rounded border border-red-900/40">
+                        {p.stock === 0 ? 'ცარიელია' : 'მცირე'}
+                      </span>
+                    )}
+                  </span>
                 </div>
               </div>
 
+              {/* Product buttons actions shelf */}
               {isPrivileged && (
-                <div className="flex gap-2 pt-3 border-t border-slate-800 mt-3 select-none">
-                  <button onClick={() => { setRefillTarget(p); setRefillQuantity(10); setRefillPrice(p.purchasePrice); setRefillNote('მარაგის დაგეგმილი შევსება და საწყობის განახლება'); }} className="flex-1 py-1 px-1.5 bg-slate-950 text-cyan-400 font-bold border border-slate-800 rounded flex items-center justify-center gap-1">
-                    <RefreshCw className="w-3" /> შევსება
+                <div className="p-2.5 bg-slate-950/70 border-t border-slate-850 flex gap-2">
+                  <button
+                    id={`refill-stock-btn-${p.id}`}
+                    onClick={() => handleOpenRefill(p)}
+                    className="flex-1 py-1.5 px-2.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 text-cyan-400 hover:text-cyan-300 font-extrabold rounded-lg text-[10px] cursor-pointer flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    მარაგის შევსება
                   </button>
-                  <button onClick={() => handleOpenEdit(p)} className="p-1 px-2.5 bg-slate-950 text-amber-500 border border-slate-800 rounded"><Edit3 className="w-3.5" /></button>
-                  <button onClick={() => { if(confirm('დარწმუნებული ხართ პროდუქტის წაშლაში?')) onDeleteProduct(p.id); }} className="p-1 px-2.5 bg-red-950/20 text-red-400 border border-slate-800 rounded"><Trash2 className="w-3.5" /></button>
+
+                  <button
+                    id={`edit-product-btn-${p.id}`}
+                    onClick={() => handleOpenEdit(p)}
+                    className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-amber-500/50 text-amber-500 hover:text-amber-400 rounded-lg cursor-pointer flex items-center justify-center"
+                    title="დეტალები / რედაქტირება"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    id={`delete-product-btn-${p.id}`}
+                    onClick={() => {
+                      if (confirm('ნამდვილად გსურთ პროდუქტის წაშლა კატალოგიდან? (მონაცემები მაინც დარჩება არქივებში)')) {
+                        onDeleteProduct(p.id);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 bg-red-950/20 hover:bg-red-950/50 border border-red-500/10 hover:border-red-500/45 text-red-500 rounded-lg cursor-pointer flex items-center justify-center"
+                    title="პროდუქტის წაშლა"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )}
             </div>
@@ -198,81 +345,386 @@ export default function ProductsSection({
         })}
       </div>
 
-      {/* Refill Modal */}
-      {refillTarget && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-100 flex items-center gap-1.5">
-                <RefreshCw className="w-4 h-4 text-cyan-400" /> მარაგის შევსება
+      {/* MODAL: Add / Edit Product */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2.5 border-b border-slate-800">
+              <h3 className="text-sm font-black text-slate-100 flex items-center gap-1.5 uppercase tracking-wider">
+                <Sparkles className="w-4 h-4 text-amber-400" />
+                {editingProduct ? 'პროდუქტის მოდიფიკაცია' : 'ახალი პროდუქტის დამატება'}
               </h3>
-              <button onClick={() => setRefillTarget(null)} className="text-slate-500 hover:text-slate-200 cursor-pointer"><X className="w-4 h-4" /></button>
+              <button
+                id="close-prod-form-modal"
+                onClick={() => setShowAddModal(false)}
+                className="p-1 text-slate-400 hover:text-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <p className="text-slate-400 text-xs">{refillTarget.name} <span className="text-amber-500">({refillTarget.stock} {refillTarget.unit} ამჟამად)</span></p>
-            <form onSubmit={handleRefillSubmit} className="space-y-3 text-xs">
-              <div>
-                <label className="block text-slate-400 mb-1">რაოდენობა ({refillTarget.unit})</label>
-                <input type="number" min={1} value={refillQuantity} onChange={e => setRefillQuantity(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none" />
+
+            <form onSubmit={handleSubmitProductForm} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">პროდუქტის კოდი / SKU</label>
+                  <input
+                    type="text"
+                    required
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none focus:border-amber-500 text-slate-100 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">სახელწოდება</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="მაგ. ძრავის ზეთი 5W-40"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none focus:border-amber-500 text-slate-100"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-slate-400 mb-1">შესყიდვის ფასი ₾</label>
-                <input type="number" min={0} step="0.01" value={refillPrice} onChange={e => setRefillPrice(Number(e.target.value))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] uppercase font-bold text-slate-400">კატეგორია</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsCustomCategory(!isCustomCategory);
+                        setCategory('ზეთები / ფილტრები');
+                      }}
+                      className="text-[9px] text-amber-400 hover:underline cursor-pointer"
+                    >
+                      {isCustomCategory ? 'არსებულიდან არჩევა' : '+ ახალი კატეგორია'}
+                    </button>
+                  </div>
+                  {isCustomCategory ? (
+                    <input
+                      type="text"
+                      required
+                      placeholder="ჩაწერეთ ახალი კატეგორია"
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none focus:border-amber-500 text-slate-100"
+                    />
+                  ) : (
+                    <select
+                      value={category}
+                      onChange={(e) => setCategory(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 text-slate-100 focus:outline-none focus:border-amber-500"
+                    >
+                      {Array.from(new Set([
+                        'ანთების სისტემა',
+                        'ზეთები / ფილტრები',
+                        'სამუხრუჭე სისტემა',
+                        'გაგრილების სისტემა',
+                        'შასი / სავალი ნაწილი',
+                        'აქსესუარები / ქიმია',
+                        'სხვა სხვადასხვა',
+                        ...products.map(p => p.category)
+                      ])).map((catVal) => (
+                        <option key={catVal} value={catVal}>{catVal}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">ბრენდი</label>
+                  <input
+                    type="text"
+                    placeholder="მაგ. Mobil, Brembo, NGK"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none focus:border-amber-500 text-slate-100"
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-slate-400 mb-1">შენიშვნა</label>
-                <input type="text" value={refillNote} onChange={e => setRefillNote(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none" />
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">გასაზომი ერთეული</label>
+                  <input
+                    type="text"
+                    required
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-100 text-center"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">მინიმალური მარაგი</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={minStock}
+                    onChange={(e) => setMinStock(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">საწყისი მარაგი</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    disabled={!!editingProduct && !isSuper} // only superAdmin can directly overwrite database stock totals
+                    value={stock}
+                    onChange={(e) => setStock(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold disabled:opacity-40"
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 pt-2">
-                <button type="button" onClick={() => setRefillTarget(null)}
-                  className="py-2 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl font-semibold cursor-pointer">გაუქმება</button>
-                <button type="submit"
-                  className="py-2 bg-cyan-500 hover:bg-cyan-600 text-slate-950 rounded-xl font-black cursor-pointer">შევსება</button>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">შესასყიდი ფასი (₾)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={purchasePrice}
+                    onChange={(e) => setPurchasePrice(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-100 font-mono font-bold text-red-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">გასაყიდი ფასი (₾)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0"
+                    value={salePrice}
+                    onChange={(e) => setSalePrice(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-100 font-mono font-bold text-emerald-400"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">აღწერა</label>
+                <textarea
+                  placeholder="ჩაწერეთ მოდელების თავსებადობა, დეტალები..."
+                  rows={2}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 rounded p-2.5 focus:outline-none text-slate-200 text-[11px]"
+                />
+              </div>
+
+              <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 space-y-1.5">
+                <label className="block text-[10px] uppercase font-bold text-slate-400">პროდუქტის ფოტოს ლინკი (URL)</label>
+                <input
+                  type="text"
+                  placeholder="ჩაწერეთ ფოტოს Google Drive, Unsplash, ან Image URL..."
+                  value={photoUrl}
+                  onChange={(e) => setPhotoUrl(e.target.value)}
+                  className="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 focus:outline-none text-slate-350 font-mono text-[10px]"
+                />
+                <p className="text-[9px] text-slate-500">მომხმარებელი თვითონ უთითებს ფოტოს ლინკს. სისტემა აჩვენებს Preview-ს უსაფრთხოდ.</p>
+              </div>
+
+              <div className="flex items-center justify-between pt-2.5 border-t border-slate-800">
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase font-bold text-slate-500">სტატუსი:</span>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setStatus('active')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        status === 'active' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30' : 'bg-slate-950 text-slate-500'
+                      }`}
+                    >
+                      აქტიური
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStatus('inactive')}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        status === 'inactive' ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' : 'bg-slate-950 text-slate-500'
+                      }`}
+                    >
+                      არააქტიური
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 select-none">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddModal(false)}
+                    className="px-3.5 py-1.5 bg-slate-950 text-slate-400 border border-slate-850 rounded hover:bg-slate-900 cursor-pointer"
+                  >
+                    გაუქმება
+                  </button>
+                  <button
+                    id="save-product-details-btn"
+                    type="submit"
+                    className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 text-slate-950 font-black rounded cursor-pointer"
+                  >
+                    შენახვა / დადასტურება
+                  </button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {showAddModal && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-5 space-y-4">
-            <h3 className="text-sm font-black text-slate-100 flex items-center gap-1.5 uppercase tracking-wide">
-              <Sparkles className="w-4 h-4 text-amber-400" />
-              {editingProduct ? 'პროდუქტის რედაქტირება' : 'ახალი ნაწილის დამატება'}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <input required placeholder="კოდი / SKU" value={code} onChange={(e) => setCode(e.target.value)} className="bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 focus:outline-none" />
-                <input required placeholder="პროდუქტის სახელი" value={name} onChange={(e) => setName(e.target.value)} className="bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 focus:outline-none" />
+      {/* MODAL: Stock Refill */}
+      {refillTarget && (
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-5 shadow-2xl space-y-4">
+            <div className="flex justify-between items-center pb-2 border-b border-slate-800">
+              <h3 className="text-xs font-black text-slate-100 flex items-center gap-1 uppercase tracking-wider">
+                <RefreshCw className="w-4 h-4 text-cyan-400" />
+                მარაგის შევსების ორდერი
+              </h3>
+              <button
+                onClick={() => setRefillTarget(null)}
+                className="p-1 text-slate-400 hover:text-slate-100 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 flex items-center gap-2.5">
+              {refillTarget.photoUrl && (
+                <img
+                  src={refillTarget.photoUrl}
+                  alt="refill"
+                  className="w-10 h-10 object-cover rounded-lg"
+                  referrerPolicy="no-referrer"
+                />
+              )}
+              <div>
+                <span className="text-[9px] text-slate-500 font-mono">SKU: {refillTarget.code}</span>
+                <h4 className="text-[11.5px] font-bold text-slate-100 leading-tight">{refillTarget.name}</h4>
+                <p className="text-[9.5px] text-slate-400 mt-0.5">
+                  არსებული მარაგი: <b className="text-amber-500 font-mono">{refillTarget.stock} {refillTarget.unit}</b>
+                </p>
               </div>
+            </div>
+
+            <form onSubmit={handleConfirmRefill} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <div className="flex justify-between items-center mb-1 text-[9px]">
-                    <span className="text-slate-400">კატეგორია</span>
-                    <button type="button" onClick={() => setIsCustomCategory(!isCustomCategory)} className="text-amber-400 underline">ახალი +</button>
-                  </div>
-                  {isCustomCategory ? (
-                    <input required placeholder="ახალი კატეგორია" value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100" />
-                  ) : (
-                    <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-slate-100">
-                      {categories.filter(c => c !== 'ყველა').map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  )}
+                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შესასყიდი რაოდენობა</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={refillQuantity}
+                    onChange={(e) => setRefillQuantity(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold text-cyan-400"
+                  />
                 </div>
-                <input placeholder="ბრენდი" value={brand} onChange={(e) => setBrand(e.target.value)} className="bg-slate-950 border border-slate-800 rounded p-2 text-slate-100 focus:outline-none mt-4" />
+                <div>
+                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შესასყიდი ფასი ერთეულზე (₾)</label>
+                  <input
+                    type="number"
+                    required
+                    min="0.1"
+                    step="0.01"
+                    value={refillPrice}
+                    onChange={(e) => setRefillPrice(Number(e.target.value) || 0)}
+                    className="w-full bg-slate-950 border border-slate-850 rounded px-2 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold text-amber-500"
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <input required type="number" placeholder="შესასყიდი ფასი ₾" value={purchasePrice} onChange={(e) => setPurchasePrice(Number(e.target.value))} className="bg-slate-950 border border-slate-800 rounded p-2 text-red-400" />
-                <input required type="number" placeholder="გასაყიდი ფასი ₾" value={salePrice} onChange={(e) => setSalePrice(Number(e.target.value))} className="bg-slate-950 border border-slate-800 rounded p-2 text-emerald-400" />
+
+              <div>
+                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შენიშვნა / ოფიციალური მომწოდებელი</label>
+                <input
+                  type="text"
+                  required
+                  value={refillNote}
+                  onChange={(e) => setRefillNote(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-200"
+                />
               </div>
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-3 py-1.5 bg-slate-950 border border-slate-800 text-slate-400 rounded">გაუქმება</button>
-                <button type="submit" className="px-4 py-1.5 bg-amber-500 text-slate-950 font-black rounded">შენახვა</button>
+
+              <div className="p-2.5 bg-cyan-950/20 rounded-lg border border-cyan-500/10 text-[10px] text-slate-400 space-y-1">
+                <p className="flex justify-between">
+                  <span>მიმწოდებლის ჯამი:</span>
+                  <span className="font-mono text-cyan-400 font-bold">{(refillQuantity * refillPrice).toLocaleString()} ₾</span>
+                </p>
+                <p className="flex justify-between text-[9px] text-slate-500">
+                  <span>მარაგი შევსების შემდეგ:</span>
+                  <span className="font-mono">{refillTarget.stock + refillQuantity} {refillTarget.unit}</span>
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2.5 border-t border-slate-800 font-sans select-none">
+                <button
+                  type="button"
+                  onClick={() => setRefillTarget(null)}
+                  className="px-3 py-1 bg-slate-950 border border-slate-850 text-slate-400 rounded hover:bg-slate-900 cursor-pointer"
+                >
+                  გაუქმება
+                </button>
+                <button
+                  id="submit-refill-qty-btn"
+                  type="submit"
+                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black rounded cursor-pointer"
+                >
+                  ორდერის გაშვება
+                </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* PHOTO PREVIEW POPUP */}
+      {previewPhotoUrl && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-4 shadow-2xl space-y-3 relative">
+            <button
+              onClick={() => setPreviewPhotoUrl(null)}
+              className="absolute top-2 right-2 p-1.5 bg-slate-950/85 hover:bg-slate-950 text-slate-400 hover:text-white rounded-full cursor-pointer z-10"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="bg-slate-950 p-2.5 rounded-lg border border-slate-850 text-center font-mono text-[9.5px] select-text">
+              <span className="text-slate-500">ფოტოს პირდაპირი URL:</span>
+              <p className="text-slate-300 truncate mt-1">{previewPhotoUrl}</p>
+            </div>
+
+            {/* Photo preview wrap with error detector */}
+            <div className="h-72 w-full bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center relative border border-slate-800">
+              {previewPhotoError ? (
+                <div className="text-center space-y-1.5">
+                  <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto" />
+                  <p className="text-slate-400 font-sans text-[11px]">ლინკი არასწორია ან სურათი მიუწვდომელია</p>
+                  <p className="text-slate-600 font-mono text-[9px] max-w-[250px] mx-auto">გთხოვთ მიუთითოთ პირდაპირი image URL, Google Drive საჯარო ლინკი ან Unsplash URL</p>
+                </div>
+              ) : (
+                <img
+                  src={previewPhotoUrl}
+                  alt="preview"
+                  className="w-full h-full object-contain"
+                  referrerPolicy="no-referrer"
+                  onError={() => setPreviewPhotoError(true)}
+                />
+              )}
+            </div>
+
+            <div className="flex justify-between items-center bg-slate-950 p-3 rounded-lg border border-slate-850">
+              <p className="text-[10px] text-slate-400 font-sans">ფოტოზე დაჭერისას წარმოდგენილია სრული რეალური ზომა.</p>
+              <button
+                onClick={() => setPreviewPhotoUrl(null)}
+                className="px-3.5 py-1 bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold rounded cursor-pointer leading-tight text-[10px]"
+              >
+                გავიგე
+              </button>
+            </div>
           </div>
         </div>
       )}
