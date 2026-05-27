@@ -1,16 +1,16 @@
-name: Deploy
+name: Build and Deploy
 
 on:
   push:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  deploy:
+  build:
+    if: "!startsWith(github.event.head_commit.message, 'ci: update built assets')"
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -20,14 +20,15 @@ jobs:
           cache: npm
 
       - run: npm ci
-
       - run: npm run build
 
-      - name: Add .nojekyll
-        run: touch dist/.nojekyll
-
-      - uses: JamesIves/github-pages-deploy-action@v4
-        with:
-          branch: gh-pages
-          folder: dist
-          clean: true
+      - name: Commit built assets to main branch root
+        run: |
+          cp dist/index.html index.html
+          rm -rf assets
+          cp -r dist/assets assets
+          touch .nojekyll
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html assets/ .nojekyll
+          git diff --staged --quiet && echo "nothing to commit" || git commit -m "ci: update built assets" && git push
