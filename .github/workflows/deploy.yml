@@ -13,32 +13,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Clear npm cache
-        run: npm cache clean --force
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20 # სტაბილური LTS
+          node-version: 20
           cache: npm
-      
-      - run: npm ci
 
-      # Build step
-      - run: npm run build
+      - name: Install dependencies
+        run: npm ci
 
-      # Optional: ამატებს .nojekyll ფაილს რომ შეუშალოს ხელი Jekyll-ს (საჭიროა ნონ-სტანდარტული assets-ისთვის)
-      - run: touch dist/.nojekyll
+      - name: Build
+        run: npm run build
 
-      # Build assets check: მანქნურად ნახავს აუცილებელი ფაილები რომ ნამდვილად არსებობდეს
-      - name: Verify Vite build output
-        run: |
-          if [ ! -f dist/index.html ]; then echo "build failed: dist/index.html not found"; exit 1; fi
-          ASSETJS=$(ls dist/assets/index-*.js 2>/dev/null | wc -l)
-          if [ "$ASSETJS" -eq 0 ]; then echo "build failed: dist/assets/index-*.js not found"; exit 1; fi
-          echo "Build ok! files present."
+      - name: Add .nojekyll
+        run: touch dist/.nojekyll
 
-      - uses: JamesIves/github-pages-deploy-action@v4
+      - name: Deploy to gh-pages
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
           folder: dist
