@@ -27,6 +27,19 @@ import SettingsView from './components/SettingsView';
 
 import { motion, AnimatePresence } from 'motion/react';
 
+/** Firestore rejects documents with `undefined` values — strip them recursively before every write */
+function stripUndefined(obj: any): any {
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefined(v)])
+    );
+  }
+  return obj;
+}
+
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [orders, setOrders] = useState<CarServiceOrder[]>([]);
@@ -148,7 +161,7 @@ export default function App() {
     const id = `ord-${Date.now()}`;
     const ts = new Date().toISOString();
     const o: CarServiceOrder = { ...fields, id, createdBy: currentUser?.id || 'unknown', createdAt: ts, updatedAt: ts };
-    await setDoc(doc(db, 'orders', id), o);
+    await setDoc(doc(db, 'orders', id), stripUndefined(o));
     setActiveView('regular-tab');
     setCurrentTab('dashboard');
   };
@@ -159,10 +172,10 @@ export default function App() {
     updatedServices: ServiceItem[]
   ) => {
     const batch = writeBatch(db);
-    batch.set(doc(db, 'orders', orderId), { ...updatedOrder, updatedAt: new Date().toISOString() });
+    batch.set(doc(db, 'orders', orderId), stripUndefined({ ...updatedOrder, updatedAt: new Date().toISOString() }));
     const oldSrvs = services.filter(s => s.orderId === orderId);
     oldSrvs.forEach(s => batch.delete(doc(db, 'services', s.id)));
-    updatedServices.forEach(s => batch.set(doc(db, 'services', s.id), s));
+    updatedServices.forEach(s => batch.set(doc(db, 'services', s.id), stripUndefined(s)));
     await batch.commit();
     setActiveView('regular-tab');
   };
@@ -170,11 +183,11 @@ export default function App() {
   const handleAddUser = async (fields: Omit<User, 'id' | 'createdAt'>) => {
     const id = `usr-${Date.now()}`;
     const u: User = { ...fields, id, createdAt: new Date().toISOString() };
-    await setDoc(doc(db, 'users', id), u);
+    await setDoc(doc(db, 'users', id), stripUndefined(u));
   };
 
   const handleUpdateUser = async (userId: string, updates: Partial<User>) => {
-    await updateDoc(doc(db, 'users', userId), updates as any);
+    await updateDoc(doc(db, 'users', userId), stripUndefined(updates) as any);
   };
 
   const handleDeleteUser = async (userId: string) => {
@@ -183,7 +196,7 @@ export default function App() {
 
   const handleSaveServiceConfigs = async (configs: ServiceTypeConfig[]) => {
     const batch = writeBatch(db);
-    configs.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
+    configs.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), stripUndefined(c)));
     const toDelete = serviceConfigs.filter(sc => !configs.find(c => c.id === sc.id));
     toDelete.forEach(c => batch.delete(doc(db, 'serviceConfigs', c.id)));
     await batch.commit();
@@ -191,7 +204,7 @@ export default function App() {
 
   const handleSaveCarBrands = async (brands: CarBrand[]) => {
     const batch = writeBatch(db);
-    brands.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
+    brands.forEach(b => batch.set(doc(db, 'carBrands', b.id), stripUndefined(b)));
     const toDelete = carBrands.filter(cb => !brands.find(b => b.id === cb.id));
     toDelete.forEach(b => batch.delete(doc(db, 'carBrands', b.id)));
     await batch.commit();
@@ -200,11 +213,11 @@ export default function App() {
   const handleAddProduct = async (prod: Omit<Product, 'id' | 'soldQuantity' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
     const p: Product = { ...prod, id, soldQuantity: 0, createdAt: new Date().toISOString() };
-    await setDoc(doc(db, 'products', id), p);
+    await setDoc(doc(db, 'products', id), stripUndefined(p));
   };
 
   const handleEditProduct = async (productId: string, updates: Partial<Product>) => {
-    await updateDoc(doc(db, 'products', productId), updates as any);
+    await updateDoc(doc(db, 'products', productId), stripUndefined(updates) as any);
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -220,7 +233,7 @@ export default function App() {
   const handleAddSale = async (sale: Omit<ProductSale, 'id' | 'createdAt'>) => {
     const id = `sale-${Date.now()}`;
     const s: ProductSale = { ...sale, id, createdAt: new Date().toISOString() };
-    await setDoc(doc(db, 'productSales', id), s);
+    await setDoc(doc(db, 'productSales', id), stripUndefined(s));
     const batch = writeBatch(db);
     sale.items.forEach(item => {
       const prod = products.find(p => p.id === item.productId);
@@ -237,7 +250,7 @@ export default function App() {
   const handleConfirmCloseDay = async (closing: Omit<DailyClosing, 'id' | 'createdAt'>) => {
     const id = `close-${Date.now()}`;
     const c: DailyClosing = { ...closing, id, createdAt: new Date().toISOString() };
-    await setDoc(doc(db, 'dailyClosings', id), c);
+    await setDoc(doc(db, 'dailyClosings', id), stripUndefined(c));
   };
 
   const handleDeleteOrder = async (orderId: string) => {

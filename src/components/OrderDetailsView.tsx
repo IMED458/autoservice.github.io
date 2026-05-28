@@ -92,19 +92,20 @@ export default function OrderDetailsView({
     }
     const earn = calculateMechanicEarning(editSrvType, Number(editSrvPriceValue), serviceConfigs, editSrvMechId);
     const hasCoMech = showEditCoMechanic && editSrvCoMechId && editSrvCoMechId !== editSrvMechId;
-    setDraftServices(prev => prev.map(s => s.id === editingSrvId
-      ? {
-          ...s,
-          serviceType: editSrvType,
-          description: editSrvDesc.trim(),
-          price: Number(editSrvPriceValue),
-          mechanicId: editSrvMechId,
-          mechanicEarning: earn,
-          coMechanicId: hasCoMech ? editSrvCoMechId : undefined,
-          coMechanicEarning: hasCoMech ? Number(editSrvCoMechEarning) || 0 : undefined,
-        }
-      : s
-    ));
+    setDraftServices(prev => prev.map(s => {
+      if (s.id !== editingSrvId) return s;
+      // Build without undefined — Firestore rejects undefined fields
+      const { coMechanicId: _a, coMechanicEarning: _b, ...base } = s;
+      return {
+        ...base,
+        serviceType: editSrvType,
+        description: editSrvDesc.trim(),
+        price: Number(editSrvPriceValue),
+        mechanicId: editSrvMechId,
+        mechanicEarning: earn,
+        ...(hasCoMech ? { coMechanicId: editSrvCoMechId, coMechanicEarning: Number(editSrvCoMechEarning) || 0 } : {}),
+      };
+    }));
     setEditingSrvId(null);
   };
 
@@ -125,8 +126,7 @@ export default function OrderDetailsView({
       price: Number(servicePrice),
       mechanicId: selectedMechanicId,
       mechanicEarning: earn,
-      coMechanicId: hasCoMech ? coMechanicId : undefined,
-      coMechanicEarning: hasCoMech ? Number(coMechanicEarning) || 0 : undefined,
+      ...(hasCoMech ? { coMechanicId: coMechanicId, coMechanicEarning: Number(coMechanicEarning) || 0 } : {}),
       createdAt: new Date().toISOString(),
     };
     setDraftServices(prev => [...prev, newSrv]);

@@ -77,8 +77,8 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
         problemDescription: problemDescription.trim() || 'არაა აღწერილი',
         status,
         paymentStatus,
-        assignedEmployeeIds: assignedEmployeeIds.length > 0 ? assignedEmployeeIds : undefined,
-        assignedServiceType: assignedServiceType || undefined,
+        ...(assignedEmployeeIds.length > 0 ? { assignedEmployeeIds } : {}),
+        ...(assignedServiceType ? { assignedServiceType } : {}),
       });
     } finally {
       setSaving(false);
