@@ -162,9 +162,8 @@ export default function ProductsSection({
 
   const handleOpenRefill = (p: Product) => {
     setRefillTarget(p);
-    setRefillQuantity(10);
+    setRefillQuantity(1);
     setRefillPrice(p.purchasePrice);
-    setRefillNote('საცავის მარაგის დაგეგმილი შევსება და კორექტირება');
   };
 
   return (
