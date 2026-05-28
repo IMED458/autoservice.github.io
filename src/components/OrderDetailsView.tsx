@@ -409,11 +409,13 @@ export default function OrderDetailsView({
                         const t = e.target.value;
                         setServiceType(t);
                         const cfg = serviceConfigs.find(c => c.id === t);
-                        if (cfg?.coMechanicId) {
-                          const earning = cfg.coMechanicRewardType === 'percentage'
-                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (cfg.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
-                            : (cfg.coMechanicEarning ?? '');
-                          setCoMechanicId(cfg.coMechanicId);
+                        const empCo = cfg?.employeeRewards?.[selectedMechanicId];
+                        const coId = empCo?.coMechanicId;
+                        if (coId) {
+                          const earning = empCo!.coMechanicRewardType === 'percentage'
+                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (empCo!.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
+                            : (empCo!.coMechanicEarning ?? '');
+                          setCoMechanicId(coId);
                           setCoMechanicEarning(earning);
                           setShowCoMechanic(true);
                         } else {
@@ -434,9 +436,10 @@ export default function OrderDetailsView({
                         // Recalculate co-mechanic earning if percentage type
                         if (showCoMechanic && coMechanicId) {
                           const cfg = serviceConfigs.find(c => c.id === serviceType);
-                          if (cfg?.coMechanicRewardType === 'percentage' && cfg.coMechanicEarning != null) {
+                          const empCo = cfg?.employeeRewards?.[selectedMechanicId];
+                          if (empCo?.coMechanicRewardType === 'percentage' && empCo.coMechanicEarning != null) {
                             const p = parseFloat(newPrice) || 0;
-                            setCoMechanicEarning(p > 0 ? +((p * cfg.coMechanicEarning) / 100).toFixed(2) : '');
+                            setCoMechanicEarning(p > 0 ? +((p * empCo.coMechanicEarning) / 100).toFixed(2) : '');
                           }
                         }
                       }}

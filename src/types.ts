@@ -44,6 +44,9 @@ export interface ServiceTypeConfig {
     rewardType: 'percentage' | 'flat';
     percentageReward: number;
     flatReward: number;
+    coMechanicId?: string;
+    coMechanicRewardType?: 'flat' | 'percentage';
+    coMechanicEarning?: number;
   }>;
   coMechanicId?: string;            // permanently assigned second executor for this service
   coMechanicRewardType?: 'flat' | 'percentage'; // how the co-executor earning is calculated
