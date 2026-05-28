@@ -23,6 +23,16 @@ export const INITIAL_USERS: User[] = [
     createdAt: '2026-05-01T10:00:00Z',
   },
   {
+    id: 'usr-dev-1',
+    firstName: 'გიორგი',
+    lastName: 'იმედაშვილი',
+    username: 'imedo',
+    passwordHash: hashPassword('imed458'),
+    role: 'super_admin',
+    enabledModules: ['shop', 'day_closing', 'reports'],
+    createdAt: '2026-01-01T09:00:00Z',
+  },
+  {
     id: 'usr-mech-1',
     firstName: 'გიორგი',
     lastName: 'ბერიძე',

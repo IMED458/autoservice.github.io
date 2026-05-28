@@ -223,3 +223,8 @@ export function hasModule(user: User, mod: string): boolean {
 export function isAdminRole(role: Role): boolean {
   return role === 'super_admin' || role === 'admin' || role === 'manager';
 }
+
+/** Returns true for roles that have OWNER-level full access (super_admin and manager are equivalent) */
+export function isOwnerLike(role: Role): boolean {
+  return role === 'super_admin' || role === 'manager';
+}

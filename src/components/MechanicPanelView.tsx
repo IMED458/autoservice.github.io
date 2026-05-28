@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig } from '../types';
+import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike } from '../types';
 import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -448,7 +448,7 @@ function EmployeeEarningsView({
 // Main export — switches based on role
 // ──────────────────────────────────────────────
 export default function MechanicPanelView(props: MechanicPanelViewProps) {
-  if (props.currentUser.role === 'super_admin') {
+  if (isOwnerLike(props.currentUser.role)) {
     return (
       <OwnerProfitView
         orders={props.orders}

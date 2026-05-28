@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Role, ROLE_LABELS } from '../types';
+import { User, Role, ROLE_LABELS, isOwnerLike } from '../types';
 import { hashPassword } from '../utils/crypto';
 import { UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -13,7 +13,8 @@ interface EmployeesViewProps {
 }
 
 export default function EmployeesView({ users, currentUser, onAddUser, onUpdateUser, onDeleteUser }: EmployeesViewProps) {
-  const isSuperAdmin = currentUser.role === 'super_admin';
+  // Manager has same full permissions as super_admin
+  const isOwner = isOwnerLike(currentUser.role);
   const isAdmin = currentUser.role === 'admin';
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -29,6 +30,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [editFirst, setEditFirst] = useState('');
   const [editLast, setEditLast] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editPassword, setEditPassword] = useState('');
   const [editRole, setEditRole] = useState<Role>('mechanic');
   const [editModules, setEditModules] = useState<string[]>([]);
@@ -50,7 +52,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
       username: username.trim().toLowerCase(),
       passwordHash: hashPassword(password),
       role,
-      enabledModules: [],
+      enabledModules: role === 'super_admin' || role === 'manager' ? ['shop', 'day_closing', 'reports'] : [],
     });
     setSuccess('თანამშრომელი დაემატა!');
     setFirstName(''); setLastName(''); setUsername(''); setPassword('');
@@ -62,6 +64,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     setEditingUser(u);
     setEditFirst(u.firstName);
     setEditLast(u.lastName);
+    setEditUsername(u.username);
     setEditPassword('');
     setEditRole(u.role);
     setEditModules(u.enabledModules ?? []);
@@ -69,17 +72,27 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
 
   const handleSaveEdit = () => {
     if (!editingUser) return;
+    // Check username uniqueness (ignore self)
+    if (editUsername.trim() && users.some(u => u.id !== editingUser.id && u.username.toLowerCase() === editUsername.trim().toLowerCase())) {
+      setSuccess('');
+      setError('ეს იუზერნეიმი უკვე დაკავებულია');
+      return;
+    }
     const updates: Partial<User> = {
       firstName: editFirst.trim(),
       lastName: editLast.trim(),
       role: editRole,
       enabledModules: editModules,
     };
+    if (editUsername.trim()) {
+      (updates as any).username = editUsername.trim().toLowerCase();
+    }
     if (editPassword.trim()) {
       (updates as any).passwordHash = hashPassword(editPassword.trim());
     }
     onUpdateUser(editingUser.id, updates);
     setEditingUser(null);
+    setError('');
     setSuccess('ცვლილებები შენახულია!');
     setTimeout(() => setSuccess(''), 3000);
   };
@@ -97,7 +110,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   const getRoleIcon = (r: Role) => {
     if (r === 'super_admin') return <Crown className="w-4 h-4" />;
     if (r === 'admin') return <Shield className="w-4 h-4" />;
-    if (r === 'manager') return <Shield className="w-4 h-4" />;
+    if (r === 'manager') return <Crown className="w-4 h-4" />;
     return <Wrench className="w-4 h-4" />;
   };
 
@@ -108,50 +121,49 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400';
   };
 
-  // Available roles for creation based on current user
-  const availableRoles: { value: Role; label: string }[] = isSuperAdmin
-    ? [
-        { value: 'mechanic', label: 'ხელოსანი' },
-        { value: 'admin', label: 'ადმინი' },
-        { value: 'manager', label: 'მენეჯერი' },
-      ]
+  // All available roles — owner/manager can assign any role; admin can only assign mechanic/manager
+  const allRoleOptions: { value: Role; label: string }[] = [
+    { value: 'super_admin', label: 'მფლობელი' },
+    { value: 'manager', label: 'მენეჯერი' },
+    { value: 'admin', label: 'ადმინი' },
+    { value: 'mechanic', label: 'ხელოსანი' },
+  ];
+
+  const availableRoles = isOwner
+    ? allRoleOptions
     : [
-        { value: 'mechanic', label: 'ხელოსანი' },
-        { value: 'manager', label: 'მენეჯერი' },
+        { value: 'mechanic' as Role, label: 'ხელოსანი' },
+        { value: 'manager' as Role, label: 'მენეჯერი' },
       ];
 
   const canEdit = (u: User) => {
-    if (u.id === currentUser.id) return true; // anyone can edit themselves
-    if (isSuperAdmin) return true;
+    if (u.id === currentUser.id) return true;
+    if (isOwner) return true;
     if (isAdmin && u.role === 'mechanic') return true;
     return false;
   };
 
   const canDelete = (u: User) => {
     if (u.id === currentUser.id) return false;
-    if (u.role === 'super_admin') return false;
-    if (isSuperAdmin) return true;
+    // Protect the developer account from deletion
+    if (u.username === 'imedo') return false;
+    if (isOwner) return true;
     if (isAdmin && u.role === 'mechanic') return true;
     return false;
   };
 
-  // Available edit roles
-  const editRoles: { value: Role; label: string }[] = isSuperAdmin
-    ? [
-        { value: 'mechanic', label: 'ხელოსანი' },
-        { value: 'admin', label: 'ადმინი' },
-        { value: 'manager', label: 'მენეჯერი' },
-      ]
-    : [
-        { value: 'mechanic', label: 'ხელოსანი' },
-        { value: 'manager', label: 'მენეჯერი' },
-      ];
+  // Can we change this user's role in the edit modal?
+  const canEditRole = (u: User) => {
+    if (u.id === currentUser.id) return false;  // can't change own role
+    if (u.username === 'imedo') return false;    // protect dev account role
+    return isOwner || isAdmin;
+  };
 
   return (
     <div className="max-w-lg mx-auto p-4 pb-28 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-bold text-slate-300">პერსონალი ({users.length})</h3>
-        {(isSuperAdmin || isAdmin) && (
+        {(isOwner || isAdmin) && (
           <button
             onClick={() => { setShowAddForm(!showAddForm); setError(''); }}
             className="flex items-center gap-1.5 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-2 rounded-xl cursor-pointer transition-colors">
@@ -202,22 +214,21 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-700 focus:outline-none focus:border-amber-500/50" />
             </div>
+
+            {/* Role — dropdown select for full control */}
             <div>
-              <label className="block text-[11px] text-slate-400 font-semibold mb-1.5">როლი *</label>
-              <div className={`grid gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl`}
-                style={{ gridTemplateColumns: `repeat(${availableRoles.length}, 1fr)` }}>
+              <label className="block text-[11px] text-slate-400 font-semibold mb-1">როლი *</label>
+              <select
+                value={role}
+                onChange={e => setRole(e.target.value as Role)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/50 font-medium"
+              >
                 {availableRoles.map(r => (
-                  <button
-                    key={r.value}
-                    type="button"
-                    onClick={() => setRole(r.value)}
-                    className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${role === r.value ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
-                  >
-                    {r.label}
-                  </button>
+                  <option key={r.value} value={r.value}>{r.label}</option>
                 ))}
-              </div>
+              </select>
             </div>
+
             <button type="submit" className="w-full py-3 mt-1 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-xl cursor-pointer active:scale-[0.98] transition-all">
               შენახვა და დამატება
             </button>
@@ -228,6 +239,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
       <div className="space-y-2.5">
         {users.map(user => {
           const isOwn = user.id === currentUser.id;
+          const isDev = user.username === 'imedo';
           return (
             <div key={user.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
               <div className="flex items-center gap-3 min-w-0">
@@ -238,6 +250,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
                   <h4 className="font-semibold text-slate-200 truncate">
                     {user.firstName} {user.lastName}
                     {isOwn && <span className="text-[10px] text-slate-500 ml-1">(თქვენ)</span>}
+                    {isDev && <span className="text-[10px] text-indigo-400/70 ml-1">(sys)</span>}
                   </h4>
                   <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 mt-0.5">
                     <span className="font-mono">@{user.username}</span>
@@ -279,7 +292,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
           >
             <div className="flex items-center justify-between">
               <h3 className="font-black text-slate-100">რედაქტირება</h3>
-              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-slate-200 cursor-pointer p-1">
+              <button onClick={() => { setEditingUser(null); setError(''); }} className="text-slate-500 hover:text-slate-200 cursor-pointer p-1">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -297,6 +310,14 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/50" />
                 </div>
               </div>
+
+              <div>
+                <label className="block text-[11px] text-slate-400 mb-1">იუზერნეიმი</label>
+                <input type="text" value={editUsername} onChange={e => setEditUsername(e.target.value)}
+                  placeholder="username (ლათინური)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50 font-mono" />
+              </div>
+
               <div>
                 <label className="block text-[11px] text-slate-400 mb-1">ახალი პაროლი (სურვილისამებრ)</label>
                 <input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)}
@@ -304,24 +325,21 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50" />
               </div>
 
-              {(isSuperAdmin || isAdmin) && editingUser.id !== currentUser.id && editingUser.role !== 'super_admin' && (
+              {canEditRole(editingUser) && (
                 <>
                   <div>
-                    <label className="block text-[11px] text-slate-400 mb-1.5">როლი</label>
-                    <div className={`grid gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl`}
-                      style={{ gridTemplateColumns: `repeat(${editRoles.length}, 1fr)` }}>
-                      {editRoles.map(r => (
-                        <button
-                          key={r.value}
-                          type="button"
-                          onClick={() => setEditRole(r.value)}
-                          className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${editRole === r.value ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
-                        >
-                          {r.label}
-                        </button>
+                    <label className="block text-[11px] text-slate-400 mb-1">როლი</label>
+                    <select
+                      value={editRole}
+                      onChange={e => setEditRole(e.target.value as Role)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/50 font-medium"
+                    >
+                      {allRoleOptions.map(r => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
                       ))}
-                    </div>
+                    </select>
                   </div>
+
                   <div>
                     <label className="block text-[11px] text-slate-400 mb-2">ჩართული მოდულები</label>
                     <div className="space-y-2.5">
@@ -344,8 +362,14 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
                 </>
               )}
 
+              {error && (
+                <div className="p-2.5 bg-red-950/40 border border-red-500/20 text-red-400 text-xs rounded-xl flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />{error}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-2 pt-1">
-                <button type="button" onClick={() => setEditingUser(null)}
+                <button type="button" onClick={() => { setEditingUser(null); setError(''); }}
                   className="py-2.5 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl text-xs font-semibold cursor-pointer">
                   გაუქმება
                 </button>

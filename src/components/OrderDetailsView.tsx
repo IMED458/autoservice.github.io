@@ -164,7 +164,7 @@ export default function OrderDetailsView({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
-          {currentUser.role === 'super_admin' && onDeleteOrder && (
+          {(currentUser.role === 'super_admin' || currentUser.role === 'manager') && onDeleteOrder && (
             <button
               onClick={() => { if (confirm('ნამდვილად წაიშალოს ეს დავალება? (ყველა სერვისი წაიშლება)')) onDeleteOrder(order.id); }}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-red-950/20 border border-red-500/20 px-2.5 py-1.5 rounded-xl cursor-pointer"

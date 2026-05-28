@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { db } from './firebase';
@@ -76,6 +76,12 @@ export default function App() {
               username: INITIAL_USERS[0].username,
               passwordHash: INITIAL_USERS[0].passwordHash,
             });
+          }
+          // Ensure developer account (imedo) exists
+          const devUser = INITIAL_USERS.find(u => u.username === 'imedo')!;
+          const devExists = usersSnap.docs.some(d => d.data().username === 'imedo');
+          if (!devExists) {
+            await setDoc(doc(db, 'users', devUser.id), devUser);
           }
         }
       } catch (e) {
@@ -348,7 +354,7 @@ export default function App() {
                       onConfirmCloseDay={handleConfirmCloseDay}
                     />
                   )}
-                  {currentTab === 'settings' && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
+                  {currentTab === 'settings' && (isOwnerLike(currentUser.role) || currentUser.role === 'admin') && (
                     <SettingsView
                       serviceConfigs={serviceConfigs}
                       carBrands={carBrands}
