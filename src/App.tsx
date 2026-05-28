@@ -65,10 +65,17 @@ export default function App() {
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
           await batch.commit();
         } else {
-          // Ensure owner (super_admin) account exists even on existing databases
-          const ownerExists = usersSnap.docs.some(d => d.data().username === 'zviad' || d.data().role === 'super_admin');
-          if (!ownerExists) {
+          // Ensure owner (super_admin) account exists and credentials are up-to-date
+          const ownerDoc = usersSnap.docs.find(d => d.data().role === 'super_admin' || d.data().username === 'zviad' || d.data().username === 'zviadi');
+          if (!ownerDoc) {
+            // No owner at all — create one
             await setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]);
+          } else if (ownerDoc.data().username !== 'zviadi') {
+            // Owner exists but has old username — migrate credentials
+            await updateDoc(doc(db, 'users', ownerDoc.id), {
+              username: INITIAL_USERS[0].username,
+              passwordHash: INITIAL_USERS[0].passwordHash,
+            });
           }
         }
       } catch (e) {

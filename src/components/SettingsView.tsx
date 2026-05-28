@@ -42,6 +42,7 @@ export default function SettingsView({
   // Permanent co-executor editing
   const [editCoMechCfgId, setEditCoMechCfgId] = useState<string | null>(null);
   const [editCoMechUserId, setEditCoMechUserId] = useState('');
+  const [editCoMechRewardType, setEditCoMechRewardType] = useState<'flat' | 'percentage'>('flat');
   const [editCoMechEarning, setEditCoMechEarning] = useState<number | string>('');
 
   // Car brands state
@@ -122,8 +123,14 @@ export default function SettingsView({
   };
 
   const saveCoMech = (cfgId: string) => {
+    if (!editCoMechUserId) { removeCoMech(cfgId); return; }
     const updated = serviceConfigs.map(c => c.id === cfgId
-      ? { ...c, coMechanicId: editCoMechUserId || undefined, coMechanicEarning: editCoMechUserId ? Number(editCoMechEarning) || 0 : undefined }
+      ? {
+          ...c,
+          coMechanicId: editCoMechUserId,
+          coMechanicRewardType: editCoMechRewardType,
+          coMechanicEarning: Number(editCoMechEarning) || 0,
+        }
       : c);
     onSaveServiceConfigs(updated);
     setEditCoMechCfgId(null);
@@ -132,9 +139,10 @@ export default function SettingsView({
 
   const removeCoMech = (cfgId: string) => {
     const updated = serviceConfigs.map(c => c.id === cfgId
-      ? { ...c, coMechanicId: undefined, coMechanicEarning: undefined }
+      ? { ...c, coMechanicId: undefined, coMechanicRewardType: undefined, coMechanicEarning: undefined }
       : c);
     onSaveServiceConfigs(updated);
+    setSuccess('წაიშალა!');
   };
 
   const handleAddBrand = (e: React.FormEvent) => {
@@ -275,20 +283,13 @@ export default function SettingsView({
 
                         {/* Permanent co-executor */}
                         <div className="bg-slate-950 border border-slate-700/40 rounded-xl p-3 space-y-2">
-                          <div className="flex items-center justify-between">
-                            <p className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
-                              <UserPlus className="w-3 h-3 text-cyan-400" /> მუდმივი მეორე შემსრულებელი
-                            </p>
-                            {cfg.coMechanicId && editCoMechCfgId !== cfg.id && (
-                              <button onClick={() => removeCoMech(cfg.id)}
-                                className="p-1 border border-red-500/20 bg-red-950/20 text-red-400 rounded cursor-pointer">
-                                <X className="w-3 h-3" />
-                              </button>
-                            )}
-                          </div>
+                          <p className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                            <UserPlus className="w-3 h-3 text-cyan-400" /> მუდმივი მეორე შემსრულებელი
+                          </p>
 
                           {editCoMechCfgId === cfg.id ? (
                             <div className="space-y-2">
+                              {/* Employee select */}
                               <select value={editCoMechUserId} onChange={e => setEditCoMechUserId(e.target.value)}
                                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 text-[11px]">
                                 <option value="">— არ არის მინიჭებული —</option>
@@ -296,14 +297,33 @@ export default function SettingsView({
                                   <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
                                 ))}
                               </select>
+
                               {editCoMechUserId && (
-                                <div className="flex items-center gap-2">
-                                  <label className="text-[10px] text-slate-400 whitespace-nowrap">ფიქს. ანაზღაურება (₾):</label>
-                                  <input type="number" value={editCoMechEarning} onChange={e => setEditCoMechEarning(e.target.value)}
-                                    placeholder="0"
-                                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 font-mono text-[11px] text-center" />
-                                </div>
+                                <>
+                                  {/* Reward type toggle */}
+                                  <div className="grid grid-cols-2 gap-1.5 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+                                    <button type="button" onClick={() => setEditCoMechRewardType('flat')}
+                                      className={`py-1 text-[10px] font-bold rounded-lg cursor-pointer transition-all ${editCoMechRewardType === 'flat' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}>
+                                      ფიქსირებული (₾)
+                                    </button>
+                                    <button type="button" onClick={() => setEditCoMechRewardType('percentage')}
+                                      className={`py-1 text-[10px] font-bold rounded-lg cursor-pointer transition-all ${editCoMechRewardType === 'percentage' ? 'bg-cyan-600 text-white' : 'text-slate-400'}`}>
+                                      პროცენტული (%)
+                                    </button>
+                                  </div>
+                                  {/* Amount / percentage field */}
+                                  <div className="flex items-center gap-2">
+                                    <label className="text-[10px] text-slate-400 whitespace-nowrap">
+                                      {editCoMechRewardType === 'flat' ? 'თანხა (₾):' : 'პროცენტი (%):'}
+                                    </label>
+                                    <input type="number" value={editCoMechEarning} onChange={e => setEditCoMechEarning(e.target.value)}
+                                      placeholder={editCoMechRewardType === 'flat' ? '0' : '50'}
+                                      className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 font-mono text-[11px] text-center" />
+                                    <span className="text-[11px] text-slate-400 font-bold">{editCoMechRewardType === 'flat' ? '₾' : '%'}</span>
+                                  </div>
+                                </>
                               )}
+
                               <div className="flex gap-2">
                                 <button onClick={() => setEditCoMechCfgId(null)}
                                   className="flex-1 py-1 bg-slate-900 border border-slate-800 text-slate-400 rounded text-[10px] cursor-pointer">გაუქმება</button>
@@ -320,20 +340,32 @@ export default function SettingsView({
                                   {mechanics.find(m => m.id === cfg.coMechanicId)?.firstName || '?'}{' '}
                                   {mechanics.find(m => m.id === cfg.coMechanicId)?.lastName || ''}
                                 </span>
-                                <span className="ml-2 text-cyan-400 font-bold text-[11px]">{cfg.coMechanicEarning ?? 0} ₾</span>
+                                <span className="ml-2 text-cyan-400 font-bold text-[11px]">
+                                  {cfg.coMechanicRewardType === 'percentage'
+                                    ? `${cfg.coMechanicEarning ?? 0}%`
+                                    : `${cfg.coMechanicEarning ?? 0} ₾`}
+                                </span>
                               </div>
-                              <button onClick={() => {
-                                setEditCoMechCfgId(cfg.id);
-                                setEditCoMechUserId(cfg.coMechanicId || '');
-                                setEditCoMechEarning(cfg.coMechanicEarning ?? '');
-                              }} className="p-1 border border-slate-700 bg-slate-900 text-slate-400 rounded cursor-pointer">
-                                <Edit className="w-3 h-3" />
-                              </button>
+                              <div className="flex gap-1">
+                                <button onClick={() => {
+                                  setEditCoMechCfgId(cfg.id);
+                                  setEditCoMechUserId(cfg.coMechanicId || '');
+                                  setEditCoMechRewardType(cfg.coMechanicRewardType || 'flat');
+                                  setEditCoMechEarning(cfg.coMechanicEarning ?? '');
+                                }} className="p-1 border border-slate-700 bg-slate-900 text-slate-400 rounded cursor-pointer">
+                                  <Edit className="w-3 h-3" />
+                                </button>
+                                <button onClick={() => removeCoMech(cfg.id)}
+                                  className="p-1 border border-red-500/20 bg-red-950/20 text-red-400 rounded cursor-pointer">
+                                  <Trash className="w-3 h-3" />
+                                </button>
+                              </div>
                             </div>
                           ) : (
                             <button onClick={() => {
                               setEditCoMechCfgId(cfg.id);
                               setEditCoMechUserId('');
+                              setEditCoMechRewardType('flat');
                               setEditCoMechEarning('');
                             }}
                               className="w-full py-1.5 border border-dashed border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-cyan-400 hover:border-cyan-500/40 cursor-pointer transition-colors flex items-center justify-center gap-1">

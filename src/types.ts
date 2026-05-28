@@ -45,8 +45,9 @@ export interface ServiceTypeConfig {
     percentageReward: number;
     flatReward: number;
   }>;
-  coMechanicId?: string;       // permanently assigned second executor for this service
-  coMechanicEarning?: number;  // fixed earning for the permanent co-executor
+  coMechanicId?: string;            // permanently assigned second executor for this service
+  coMechanicRewardType?: 'flat' | 'percentage'; // how the co-executor earning is calculated
+  coMechanicEarning?: number;       // flat amount OR percentage value (depending on rewardType)
 }
 
 export interface ServiceItem {

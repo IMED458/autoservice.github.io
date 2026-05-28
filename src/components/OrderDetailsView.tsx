@@ -408,8 +408,11 @@ export default function OrderDetailsView({
                         setServiceType(t);
                         const cfg = serviceConfigs.find(c => c.id === t);
                         if (cfg?.coMechanicId) {
+                          const earning = cfg.coMechanicRewardType === 'percentage'
+                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (cfg.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
+                            : (cfg.coMechanicEarning ?? '');
                           setCoMechanicId(cfg.coMechanicId);
-                          setCoMechanicEarning(cfg.coMechanicEarning ?? '');
+                          setCoMechanicEarning(earning);
                           setShowCoMechanic(true);
                         } else {
                           setShowCoMechanic(false);
@@ -423,7 +426,18 @@ export default function OrderDetailsView({
                     </div>
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-0.5">ფასი (₾) *</label>
-                      <input type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)}
+                      <input type="number" value={servicePrice} onChange={e => {
+                        const newPrice = e.target.value;
+                        setServicePrice(newPrice);
+                        // Recalculate co-mechanic earning if percentage type
+                        if (showCoMechanic && coMechanicId) {
+                          const cfg = serviceConfigs.find(c => c.id === serviceType);
+                          if (cfg?.coMechanicRewardType === 'percentage' && cfg.coMechanicEarning != null) {
+                            const p = parseFloat(newPrice) || 0;
+                            setCoMechanicEarning(p > 0 ? +((p * cfg.coMechanicEarning) / 100).toFixed(2) : '');
+                          }
+                        }
+                      }}
                         placeholder="შეიყვანეთ ფასი"
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono" />
                     </div>
@@ -477,7 +491,12 @@ export default function OrderDetailsView({
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">
+                            დასარიცხი (₾)
+                            {serviceConfigs.find(c => c.id === serviceType)?.coMechanicRewardType === 'percentage' && (
+                              <span className="ml-1 text-cyan-400">({serviceConfigs.find(c => c.id === serviceType)?.coMechanicEarning}% კონფ.)</span>
+                            )}
+                          </label>
                           <input type="number" value={coMechanicEarning} onChange={e => setCoMechanicEarning(e.target.value)}
                             placeholder="0"
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />

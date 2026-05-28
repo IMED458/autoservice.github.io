@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from '../types';
-import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight, Bookmark } from 'lucide-react';
+import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
 function formatPlate(raw: string): string {
@@ -116,11 +116,10 @@ export default function DashboardView({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all_active');
 
-  // "My Tasks": orders explicitly assigned to current user that are active
-  const myTasks = orders.filter(o =>
-    (o.assignedEmployeeIds || []).includes(currentUser.id) &&
-    o.status !== 'completed'
-  );
+  // "My Tasks": orders explicitly assigned to current user that are not completed
+  const myTasksCount = orders.filter(o =>
+    (o.assignedEmployeeIds || []).includes(currentUser.id) && o.status !== 'completed'
+  ).length;
 
   const filteredOrders = orders.filter((order) => {
     const q = searchQuery.toLowerCase().trim();
@@ -134,11 +133,36 @@ export default function DashboardView({
       order.clientPhone.includes(q);
 
     if (!matchesSearch) return false;
+
+    if (selectedStatusFilter === 'my-tasks')
+      return (order.assignedEmployeeIds || []).includes(currentUser.id) && order.status !== 'completed';
     if (selectedStatusFilter === 'all_active') return order.status === 'new' || order.status === 'pending';
     if (selectedStatusFilter === 'unpaid') return order.paymentStatus === 'unpaid';
     if (selectedStatusFilter === 'all') return true;
     return order.status === selectedStatusFilter;
   });
+
+  const pills = [
+    ...(myTasksCount > 0
+      ? [{ id: 'my-tasks', label: `ჩემი დავალებები ${myTasksCount}` }]
+      : []),
+    { id: 'all_active', label: 'მიმდინარე' },
+    { id: 'new', label: 'ახალი' },
+    { id: 'pending', label: 'პროცესშია' },
+    { id: 'completed', label: 'დასრულებული' },
+    { id: 'unpaid', label: 'გადაუხდელია' },
+    { id: 'all', label: 'ყველა' },
+  ];
+
+  const titleMap: Record<string, string> = {
+    'my-tasks': 'ჩემი დავალებები',
+    'all_active': 'მიმდინარე დავალებები',
+    'new': 'ახალი დავალებები',
+    'pending': 'პროცესში მყოფი',
+    'completed': 'დასრულებული',
+    'unpaid': 'გადაუხდელი',
+    'all': 'ყველა დავალება',
+  };
 
   return (
     <div className="max-w-lg mx-auto p-4 pb-24 bg-slate-950 text-slate-100 font-sans md:max-w-6xl md:px-8 lg:px-12">
@@ -164,27 +188,10 @@ export default function DashboardView({
         </motion.div>
       )}
 
-      {/* My Tasks section */}
-      {myTasks.length > 0 && (
-        <div className="mb-6">
-          <div className="flex items-center gap-2 mb-3">
-            <Bookmark className="w-4 h-4 text-cyan-400" />
-            <h3 className="text-sm font-black text-cyan-400">ჩემი დავალებები</h3>
-            <span className="text-[10px] bg-cyan-500/15 border border-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded-full font-mono font-bold">{myTasks.length}</span>
-          </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {myTasks.map(order => (
-              <OrderCard key={order.id} order={order} allUsers={allUsers} onSelectOrder={onSelectOrder} highlight />
-            ))}
-          </div>
-          <div className="mt-5 mb-2 border-t border-slate-800/50 pt-1" />
-        </div>
-      )}
-
-      {/* Title & Stats */}
+      {/* Title & count */}
       <div className="flex items-baseline justify-between mb-4">
         <h3 className="text-lg font-bold font-sans text-slate-200">
-          {selectedStatusFilter === 'all_active' ? 'მიმდინარე დავალებები' : 'ყველა დავალება'}
+          {titleMap[selectedStatusFilter] ?? 'დავალებები'}
         </h3>
         <span className="text-xs text-slate-400 bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 font-mono font-bold">
           {filteredOrders.length} ჩანაწერი
@@ -192,7 +199,7 @@ export default function DashboardView({
       </div>
 
       {/* Search */}
-      <div className="relative mb-5">
+      <div className="relative mb-4">
         <span className="absolute inset-y-0 left-0 pl-3.5 flex items-center text-slate-500 pointer-events-none">
           <Search className="w-4 h-4" />
         </span>
@@ -208,27 +215,28 @@ export default function DashboardView({
 
       {/* Filter pills */}
       <div className="flex gap-1.5 overflow-x-auto pb-4 scrollbar-none mb-3 -mx-4 px-4">
-        {[
-          { id: 'all_active', label: 'მიმდინარე' },
-          { id: 'new', label: 'ახალი' },
-          { id: 'pending', label: 'პროცესშია' },
-          { id: 'completed', label: 'დასრულებული' },
-          { id: 'unpaid', label: 'გადაუხდელია' },
-          { id: 'all', label: 'ყველა' },
-        ].map((pill) => (
-          <button
-            id={`filter-pill-${pill.id}`}
-            key={pill.id}
-            onClick={() => setSelectedStatusFilter(pill.id)}
-            className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold select-none cursor-pointer transition-all border ${
-              selectedStatusFilter === pill.id
-                ? 'bg-slate-100 border-slate-100 text-slate-950 font-bold'
-                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-100'
-            }`}
-          >
-            {pill.label}
-          </button>
-        ))}
+        {pills.map((pill) => {
+          const isMyTasks = pill.id === 'my-tasks';
+          const isActive = selectedStatusFilter === pill.id;
+          return (
+            <button
+              id={`filter-pill-${pill.id}`}
+              key={pill.id}
+              onClick={() => setSelectedStatusFilter(pill.id)}
+              className={`whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-semibold select-none cursor-pointer transition-all border ${
+                isActive
+                  ? isMyTasks
+                    ? 'bg-cyan-500 border-cyan-500 text-slate-950 font-bold'
+                    : 'bg-slate-100 border-slate-100 text-slate-950 font-bold'
+                  : isMyTasks
+                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/20'
+                  : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-100'
+              }`}
+            >
+              {pill.label}
+            </button>
+          );
+        })}
       </div>
 
       {/* Order cards */}
@@ -240,7 +248,13 @@ export default function DashboardView({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredOrders.map((order) => (
-            <OrderCard key={order.id} order={order} allUsers={allUsers} onSelectOrder={onSelectOrder} />
+            <OrderCard
+              key={order.id}
+              order={order}
+              allUsers={allUsers}
+              onSelectOrder={onSelectOrder}
+              highlight={selectedStatusFilter === 'my-tasks'}
+            />
           ))}
         </div>
       )}
