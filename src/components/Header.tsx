@@ -3,8 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { User } from '../types';
-import { LogOut, ShieldCheck, Wrench, Menu, UserCircle } from 'lucide-react';
+import { User, ROLE_LABELS } from '../types';
+import { LogOut, ShieldCheck, Wrench, Crown } from 'lucide-react';
 
 interface HeaderProps {
   currentUser: User | null;
@@ -35,17 +35,19 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
         {/* User Badge & Logout Option */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
-            {currentUser.role === 'admin' ? (
+            {currentUser.role === 'super_admin' || currentUser.role === 'manager' ? (
+              <Crown className="w-3.5 h-3.5 text-purple-400" />
+            ) : currentUser.role === 'admin' ? (
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
             ) : (
               <Wrench className="w-3.5 h-3.5 text-cyan-400" />
             )}
             <div className="text-right">
               <div className="text-xs font-semibold text-slate-200 font-sans leading-none">
-                {currentUser.firstName} {currentUser.lastName[0]}.
+                {currentUser.firstName} {currentUser.lastName ? currentUser.lastName[0] + '.' : ''}
               </div>
               <span className="text-[9px] text-slate-500 font-semibold font-sans uppercase tracking-wider">
-                {currentUser.role === 'admin' ? 'ადმინი' : 'ხელოსანი'}
+                {ROLE_LABELS[currentUser.role]}
               </span>
             </div>
           </div>
