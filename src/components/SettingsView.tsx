@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ServiceTypeConfig, CarBrand, User, DEFAULT_CAR_BRANDS } from '../types';
-import { Plus, Edit, Trash, Save, X, Settings, Car, Wrench } from 'lucide-react';
+import { Plus, Edit, Trash, Save, X, Settings, Car, Wrench, UserPlus, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface SettingsViewProps {
@@ -38,6 +38,11 @@ export default function SettingsView({
   const [empRewardType, setEmpRewardType] = useState<'percentage' | 'flat'>('percentage');
   const [empPct, setEmpPct] = useState(50);
   const [empFlat, setEmpFlat] = useState(30);
+
+  // Permanent co-executor editing
+  const [editCoMechCfgId, setEditCoMechCfgId] = useState<string | null>(null);
+  const [editCoMechUserId, setEditCoMechUserId] = useState('');
+  const [editCoMechEarning, setEditCoMechEarning] = useState<number | string>('');
 
   // Car brands state
   const [newBrandName, setNewBrandName] = useState('');
@@ -113,6 +118,22 @@ export default function SettingsView({
       const { [empId]: _, ...rest } = c.employeeRewards || {};
       return { ...c, employeeRewards: rest };
     });
+    onSaveServiceConfigs(updated);
+  };
+
+  const saveCoMech = (cfgId: string) => {
+    const updated = serviceConfigs.map(c => c.id === cfgId
+      ? { ...c, coMechanicId: editCoMechUserId || undefined, coMechanicEarning: editCoMechUserId ? Number(editCoMechEarning) || 0 : undefined }
+      : c);
+    onSaveServiceConfigs(updated);
+    setEditCoMechCfgId(null);
+    setSuccess('შენახულია!');
+  };
+
+  const removeCoMech = (cfgId: string) => {
+    const updated = serviceConfigs.map(c => c.id === cfgId
+      ? { ...c, coMechanicId: undefined, coMechanicEarning: undefined }
+      : c);
     onSaveServiceConfigs(updated);
   };
 
@@ -250,7 +271,77 @@ export default function SettingsView({
                     </div>
 
                     {expandedCfgId === cfg.id && (
-                      <div className="border-t border-slate-800 pt-3 space-y-2">
+                      <div className="border-t border-slate-800 pt-3 space-y-3">
+
+                        {/* Permanent co-executor */}
+                        <div className="bg-slate-950 border border-slate-700/40 rounded-xl p-3 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <p className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1">
+                              <UserPlus className="w-3 h-3 text-cyan-400" /> მუდმივი მეორე შემსრულებელი
+                            </p>
+                            {cfg.coMechanicId && editCoMechCfgId !== cfg.id && (
+                              <button onClick={() => removeCoMech(cfg.id)}
+                                className="p-1 border border-red-500/20 bg-red-950/20 text-red-400 rounded cursor-pointer">
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+
+                          {editCoMechCfgId === cfg.id ? (
+                            <div className="space-y-2">
+                              <select value={editCoMechUserId} onChange={e => setEditCoMechUserId(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1.5 text-slate-200 text-[11px]">
+                                <option value="">— არ არის მინიჭებული —</option>
+                                {mechanics.map(m => (
+                                  <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                                ))}
+                              </select>
+                              {editCoMechUserId && (
+                                <div className="flex items-center gap-2">
+                                  <label className="text-[10px] text-slate-400 whitespace-nowrap">ფიქს. ანაზღაურება (₾):</label>
+                                  <input type="number" value={editCoMechEarning} onChange={e => setEditCoMechEarning(e.target.value)}
+                                    placeholder="0"
+                                    className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 font-mono text-[11px] text-center" />
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <button onClick={() => setEditCoMechCfgId(null)}
+                                  className="flex-1 py-1 bg-slate-900 border border-slate-800 text-slate-400 rounded text-[10px] cursor-pointer">გაუქმება</button>
+                                <button onClick={() => saveCoMech(cfg.id)}
+                                  className="flex-1 py-1 bg-cyan-600 text-white rounded text-[10px] font-bold cursor-pointer flex items-center justify-center gap-1">
+                                  <Check className="w-3 h-3" /> შენახვა
+                                </button>
+                              </div>
+                            </div>
+                          ) : cfg.coMechanicId ? (
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <span className="text-[11px] text-slate-200 font-semibold">
+                                  {mechanics.find(m => m.id === cfg.coMechanicId)?.firstName || '?'}{' '}
+                                  {mechanics.find(m => m.id === cfg.coMechanicId)?.lastName || ''}
+                                </span>
+                                <span className="ml-2 text-cyan-400 font-bold text-[11px]">{cfg.coMechanicEarning ?? 0} ₾</span>
+                              </div>
+                              <button onClick={() => {
+                                setEditCoMechCfgId(cfg.id);
+                                setEditCoMechUserId(cfg.coMechanicId || '');
+                                setEditCoMechEarning(cfg.coMechanicEarning ?? '');
+                              }} className="p-1 border border-slate-700 bg-slate-900 text-slate-400 rounded cursor-pointer">
+                                <Edit className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button onClick={() => {
+                              setEditCoMechCfgId(cfg.id);
+                              setEditCoMechUserId('');
+                              setEditCoMechEarning('');
+                            }}
+                              className="w-full py-1.5 border border-dashed border-slate-700 rounded-lg text-[10px] text-slate-500 hover:text-cyan-400 hover:border-cyan-500/40 cursor-pointer transition-colors flex items-center justify-center gap-1">
+                              <Plus className="w-3 h-3" /> მინიჭება
+                            </button>
+                          )}
+                        </div>
+
                         <p className="text-[10px] text-slate-500 uppercase font-bold">თანამშრომლების ინდივიდუალური განაწილება:</p>
                         {mechanics.map(emp => {
                           const er = cfg.employeeRewards?.[emp.id];

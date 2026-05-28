@@ -64,6 +64,12 @@ export default function App() {
           DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
           await batch.commit();
+        } else {
+          // Ensure owner (super_admin) account exists even on existing databases
+          const ownerExists = usersSnap.docs.some(d => d.data().username === 'zviad' || d.data().role === 'super_admin');
+          if (!ownerExists) {
+            await setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]);
+          }
         }
       } catch (e) {
         console.error('Firestore init error:', e);
@@ -246,6 +252,9 @@ export default function App() {
   }
 
   const currentSelectedOrder = orders.find(o => o.id === selectedOrderId);
+  // Executors: any non-super_admin employee can be assigned to do work
+  const executorsList = users.filter(u => u.role !== 'super_admin');
+  // Mechanics-only list (for legacy stats/reports that specifically track mechanics)
   const mechanicsList = users.filter(u => u.role === 'mechanic');
   const isAdminLike = isAdminRole(currentUser.role);
   const serviceTypeNames = serviceConfigs.map(c => ({ id: c.id, name: c.name }));
@@ -271,7 +280,7 @@ export default function App() {
               <OrderDetailsView
                 order={currentSelectedOrder}
                 services={services}
-                mechanics={mechanicsList}
+                mechanics={executorsList}
                 allUsers={users}
                 currentUser={currentUser}
                 serviceConfigs={serviceConfigs}
@@ -297,7 +306,7 @@ export default function App() {
                     <HistoryView
                       orders={orders}
                       services={services}
-                      mechanics={mechanicsList}
+                      mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
                       onSelectOrder={handleSelectOrder}
                     />
@@ -315,7 +324,7 @@ export default function App() {
                     <ReportsView
                       orders={orders}
                       services={services}
-                      mechanics={mechanicsList}
+                      mechanics={executorsList}
                       allUsers={users}
                     />
                   )}
@@ -348,6 +357,7 @@ export default function App() {
                       orders={orders}
                       services={services}
                       currentUser={currentUser}
+                      allUsers={users}
                       serviceConfigs={serviceConfigs}
                       onSelectOrder={handleSelectOrder}
                     />
@@ -361,6 +371,7 @@ export default function App() {
                       orders={orders}
                       services={services}
                       currentUser={currentUser}
+                      allUsers={users}
                       serviceConfigs={serviceConfigs}
                       onSelectOrder={handleSelectOrder}
                     />
@@ -378,7 +389,7 @@ export default function App() {
                     <HistoryView
                       orders={orders}
                       services={services}
-                      mechanics={mechanicsList}
+                      mechanics={executorsList}
                       serviceConfigs={serviceConfigs}
                       onSelectOrder={handleSelectOrder}
                     />

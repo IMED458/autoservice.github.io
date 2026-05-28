@@ -39,13 +39,15 @@ export default function OrderDetailsView({
 
   // Add service form
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
-  const [serviceType, setServiceType] = useState<string>(serviceConfigs[0]?.id || 'diagnostic');
+  const initialSrvType = serviceConfigs[0]?.id || 'diagnostic';
+  const initialSrvCfg = serviceConfigs.find(c => c.id === initialSrvType);
+  const [serviceType, setServiceType] = useState<string>(initialSrvType);
   const [serviceDescription, setServiceDescription] = useState('');
   const [servicePrice, setServicePrice] = useState<number | string>('');
   const [selectedMechanicId, setSelectedMechanicId] = useState(isMechanic ? currentUser.id : mechanics[0]?.id || '');
-  const [showCoMechanic, setShowCoMechanic] = useState(false);
-  const [coMechanicId, setCoMechanicId] = useState('');
-  const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>('');
+  const [showCoMechanic, setShowCoMechanic] = useState(!!initialSrvCfg?.coMechanicId);
+  const [coMechanicId, setCoMechanicId] = useState(initialSrvCfg?.coMechanicId || '');
+  const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>(initialSrvCfg?.coMechanicEarning ?? '');
   const [serviceError, setServiceError] = useState('');
 
   // Admin edit form
@@ -111,7 +113,7 @@ export default function OrderDetailsView({
     setServiceError('');
     if (servicePrice === '' || Number(servicePrice) < 0) { setServiceError('ფასი სავალდებულოა'); return; }
     if (!serviceDescription.trim()) { setServiceError('სამუშაო აღწერა სავალდებულოა'); return; }
-    if (!selectedMechanicId) { setServiceError('გთხოვთ აირჩიოთ ხელოსანი'); return; }
+    if (!selectedMechanicId) { setServiceError('გთხოვთ აირჩიოთ შემსრულებელი'); return; }
 
     const earn = calculateMechanicEarning(serviceType, Number(servicePrice), serviceConfigs, selectedMechanicId);
     const hasCoMech = showCoMechanic && coMechanicId && coMechanicId !== selectedMechanicId;
@@ -394,14 +396,27 @@ export default function OrderDetailsView({
                   onSubmit={handleAddNewServiceToDraft}
                   className="mb-4 bg-slate-950 border border-slate-800 p-3.5 rounded-xl space-y-3 overflow-hidden">
                   <h4 className="text-xs font-bold text-amber-500 flex items-center gap-1">
-                    <Wrench className="w-3.5 h-3.5" /> მომსახურების ჩაწერა
+                    <Plus className="w-3.5 h-3.5" /> მომსახურების ჩაწერა
                   </h4>
                   {serviceError && <div className="p-2 bg-red-950/40 border border-red-500/20 text-red-500 text-[11px] rounded-lg">{serviceError}</div>}
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-0.5">ტიპი</label>
-                      <select value={serviceType} onChange={e => { setServiceType(e.target.value); setShowCoMechanic(false); setCoMechanicId(''); setCoMechanicEarning(''); }}
+                      <select value={serviceType} onChange={e => {
+                        const t = e.target.value;
+                        setServiceType(t);
+                        const cfg = serviceConfigs.find(c => c.id === t);
+                        if (cfg?.coMechanicId) {
+                          setCoMechanicId(cfg.coMechanicId);
+                          setCoMechanicEarning(cfg.coMechanicEarning ?? '');
+                          setShowCoMechanic(true);
+                        } else {
+                          setShowCoMechanic(false);
+                          setCoMechanicId('');
+                          setCoMechanicEarning('');
+                        }
+                      }}
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
                         {serviceConfigs.map(cfg => <option key={cfg.id} value={cfg.id}>{cfg.name}</option>)}
                       </select>
@@ -415,7 +430,7 @@ export default function OrderDetailsView({
                   </div>
 
                   <div className="bg-slate-900 p-2 border border-slate-800/60 rounded-lg text-[10.5px] text-slate-400">
-                    <span className="font-semibold block mb-0.5 text-slate-300">ხელოსნის შემოსავალი:</span>
+                    <span className="font-semibold block mb-0.5 text-slate-300">შემსრულებლის შემოსავალი:</span>
                     {(() => {
                       const conf = serviceConfigs.find(c => c.id === serviceType);
                       if (!conf) return <p>50%</p>;
@@ -432,46 +447,44 @@ export default function OrderDetailsView({
                   </div>
 
                   <div>
-                    <label className="block text-[10px] text-slate-400 mb-0.5">შემსრულებელი ხელოსანი *</label>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">შემსრულებელი *</label>
                     <select disabled={isMechanic} value={selectedMechanicId} onChange={e => setSelectedMechanicId(e.target.value)}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
                       {mechanics.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                     </select>
                   </div>
 
-                  {/* Co-mechanic for flat-rate (diagnostic) services */}
-                  {isFlatService(serviceType) && (
-                    <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი (არჩევითი)</span>
-                        <button type="button"
-                          onClick={() => { setShowCoMechanic(!showCoMechanic); setCoMechanicId(''); setCoMechanicEarning(''); }}
-                          className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
-                          {showCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
-                        </button>
-                      </div>
-                      {showCoMechanic && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="block text-[10px] text-slate-500 mb-0.5">ხელოსანი</label>
-                            <select value={coMechanicId} onChange={e => setCoMechanicId(e.target.value)}
-                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
-                              <option value="">— აირჩიეთ —</option>
-                              {mechanics.filter(m => m.id !== selectedMechanicId).map(m => (
-                                <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                              ))}
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
-                            <input type="number" value={coMechanicEarning} onChange={e => setCoMechanicEarning(e.target.value)}
-                              placeholder="0"
-                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
-                          </div>
-                        </div>
-                      )}
+                  {/* Co-executor (available for all service types) */}
+                  <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი (არჩევითი)</span>
+                      <button type="button"
+                        onClick={() => { setShowCoMechanic(!showCoMechanic); if (showCoMechanic) { setCoMechanicId(''); setCoMechanicEarning(''); } }}
+                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
+                        {showCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
+                      </button>
                     </div>
-                  )}
+                    {showCoMechanic && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">შემსრულებელი</label>
+                          <select value={coMechanicId} onChange={e => setCoMechanicId(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
+                            <option value="">— აირჩიეთ —</option>
+                            {mechanics.filter(m => m.id !== selectedMechanicId).map(m => (
+                              <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
+                          <input type="number" value={coMechanicEarning} onChange={e => setCoMechanicEarning(e.target.value)}
+                            placeholder="0"
+                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   <div>
                     <label className="block text-[10px] text-slate-400 mb-0.5">მომსახურების აღწერა *</label>
@@ -498,8 +511,8 @@ export default function OrderDetailsView({
               <div className="space-y-3">
                 {draftServices.map(srv => {
                   const isEditingThis = editingSrvId === srv.id;
-                  const mechObj = mechanics.find(m => m.id === srv.mechanicId) || { firstName: 'უცნობი', lastName: '' };
-                  const coMechObj = srv.coMechanicId ? mechanics.find(m => m.id === srv.coMechanicId) : null;
+                  const mechObj = allUsers.find(m => m.id === srv.mechanicId) || { firstName: 'უცნობი', lastName: '' };
+                  const coMechObj = srv.coMechanicId ? allUsers.find(m => m.id === srv.coMechanicId) : null;
                   return (
                     <div key={srv.id} className="bg-slate-950 border border-slate-850 p-3.5 rounded-xl space-y-3">
                       {isEditingThis ? (
@@ -508,7 +521,20 @@ export default function OrderDetailsView({
                           <div className="grid grid-cols-2 gap-2">
                             <div>
                               <label className="block text-[10px] text-slate-500 mb-0.5">ტიპი</label>
-                              <select value={editSrvType} onChange={e => { setEditSrvType(e.target.value); setShowEditCoMechanic(false); setEditSrvCoMechId(''); setEditSrvCoMechEarning(''); }}
+                              <select value={editSrvType} onChange={e => {
+                                const t = e.target.value;
+                                setEditSrvType(t);
+                                const cfg = serviceConfigs.find(c => c.id === t);
+                                if (cfg?.coMechanicId) {
+                                  setEditSrvCoMechId(cfg.coMechanicId);
+                                  setEditSrvCoMechEarning(cfg.coMechanicEarning ?? '');
+                                  setShowEditCoMechanic(true);
+                                } else {
+                                  setShowEditCoMechanic(false);
+                                  setEditSrvCoMechId('');
+                                  setEditSrvCoMechEarning('');
+                                }
+                              }}
                                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
                                 {serviceConfigs.map(cfg => <option key={cfg.id} value={cfg.id}>{cfg.name}</option>)}
                               </select>
@@ -520,46 +546,44 @@ export default function OrderDetailsView({
                             </div>
                           </div>
                           <div>
-                            <label className="block text-[10px] text-slate-500 mb-0.5">პირველი ხელოსანი</label>
+                            <label className="block text-[10px] text-slate-500 mb-0.5">პირველი შემსრულებელი</label>
                             <select value={editSrvMechId} onChange={e => setEditSrvMechId(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
-                              {allUsers.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                              {allUsers.filter(u => u.role !== 'super_admin').map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
                             </select>
                           </div>
 
-                          {/* Co-mechanic edit section for flat services */}
-                          {isFlatService(editSrvType) && (
-                            <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
-                              <div className="flex items-center justify-between">
-                                <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი</span>
-                                <button type="button"
-                                  onClick={() => { setShowEditCoMechanic(!showEditCoMechanic); setEditSrvCoMechId(''); setEditSrvCoMechEarning(''); }}
-                                  className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showEditCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
-                                  {showEditCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
-                                </button>
-                              </div>
-                              {showEditCoMechanic && (
-                                <div className="grid grid-cols-2 gap-2">
-                                  <div>
-                                    <label className="block text-[10px] text-slate-500 mb-0.5">ხელოსანი</label>
-                                    <select value={editSrvCoMechId} onChange={e => setEditSrvCoMechId(e.target.value)}
-                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
-                                      <option value="">— აირჩიეთ —</option>
-                                      {allUsers.filter(u => u.id !== editSrvMechId).map(u => (
-                                        <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
-                                      ))}
-                                    </select>
-                                  </div>
-                                  <div>
-                                    <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
-                                    <input type="number" value={editSrvCoMechEarning} onChange={e => setEditSrvCoMechEarning(e.target.value)}
-                                      placeholder="0"
-                                      className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
-                                  </div>
-                                </div>
-                              )}
+                          {/* Co-executor edit section (all service types) */}
+                          <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი</span>
+                              <button type="button"
+                                onClick={() => { setShowEditCoMechanic(!showEditCoMechanic); if (showEditCoMechanic) { setEditSrvCoMechId(''); setEditSrvCoMechEarning(''); } }}
+                                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showEditCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
+                                {showEditCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
+                              </button>
                             </div>
-                          )}
+                            {showEditCoMechanic && (
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 mb-0.5">შემსრულებელი</label>
+                                  <select value={editSrvCoMechId} onChange={e => setEditSrvCoMechId(e.target.value)}
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
+                                    <option value="">— აირჩიეთ —</option>
+                                    {allUsers.filter(u => u.role !== 'super_admin' && u.id !== editSrvMechId).map(u => (
+                                      <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
+                                  <input type="number" value={editSrvCoMechEarning} onChange={e => setEditSrvCoMechEarning(e.target.value)}
+                                    placeholder="0"
+                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
+                                </div>
+                              </div>
+                            )}
+                          </div>
 
                           <div>
                             <label className="block text-[10px] text-slate-500 mb-0.5">აღწერა</label>
@@ -581,7 +605,7 @@ export default function OrderDetailsView({
                                 <Wrench className="w-3 h-3" /> {getServiceLabel(srv.serviceType)}
                               </span>
                               <span className="text-[10px] text-slate-500">
-                                ხელოსანი: <b className="text-slate-400">{mechObj.firstName} {(mechObj as any).lastName}</b>
+                                შემსრულებელი: <b className="text-slate-400">{mechObj.firstName} {(mechObj as any).lastName}</b>
                               </span>
                               {coMechObj && (
                                 <span className="text-[10px] text-slate-500">
@@ -630,7 +654,7 @@ export default function OrderDetailsView({
                     <span className="text-slate-100 font-mono font-extrabold text-sm">{totalCost} ₾</span>
                   </div>
                   <div className="flex justify-between text-slate-400 pt-1 border-t border-slate-800/60">
-                    <span>ხელოსნების ჯამური გამომუშავება:</span>
+                    <span>შემსრულებლების ჯამური გამომუშავება:</span>
                     <span className="text-cyan-400 font-mono font-extrabold text-sm">{totalMechEarnings} ₾</span>
                   </div>
                 </div>
