@@ -150,7 +150,9 @@ export default function OrderDetailsView({
     setIsEditingAdmin(false);
   };
 
-  const paidToOptions = Array.from(new Set(['ზვიადი', ...allUsers.map(u => u.firstName)]));
+  const paidToOptions = allUsers
+    .filter(u => u.username !== 'imedo')
+    .map(u => ({ id: u.id, label: `${u.firstName}${u.lastName ? ' ' + u.lastName : ''}` }));
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -292,7 +294,7 @@ export default function OrderDetailsView({
                 <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
                   {(['unpaid', 'paid'] as PaymentStatus[]).map(pay => (
                     <button key={pay} disabled={isMechanic}
-                      onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? prev.paidTo || 'ზვიადი' : undefined }))}
+                      onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? prev.paidTo || paidToOptions[0]?.label || '' : undefined }))}
                       className={`py-2 text-[10px] font-bold rounded-lg transition-all ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                         draftOrder.paymentStatus === pay
                           ? pay === 'paid' ? 'bg-green-500 text-slate-950' : 'bg-rose-500 text-slate-100'
@@ -309,10 +311,10 @@ export default function OrderDetailsView({
               <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
                 className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <label className="block text-[10px] text-amber-500 uppercase font-bold">ვისთან მოხდა გადახდა?</label>
-                <select disabled={isMechanic} value={draftOrder.paidTo || 'ზვიადი'}
+                <select disabled={isMechanic} value={draftOrder.paidTo || paidToOptions[0]?.label || ''}
                   onChange={e => setDraftOrder(prev => ({ ...prev, paidTo: e.target.value }))}
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
-                  {paidToOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                  {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
                 </select>
               </motion.div>
             )}
