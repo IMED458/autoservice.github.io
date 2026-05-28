@@ -41,13 +41,15 @@ export default function OrderDetailsView({
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
   const initialSrvType = serviceConfigs[0]?.id || 'diagnostic';
   const initialSrvCfg = serviceConfigs.find(c => c.id === initialSrvType);
+  const initialMechId = currentUser.id || mechanics[0]?.id || '';
+  const initialEmpCo = initialSrvCfg?.employeeRewards?.[initialMechId];
   const [serviceType, setServiceType] = useState<string>(initialSrvType);
   const [serviceDescription, setServiceDescription] = useState('');
   const [servicePrice, setServicePrice] = useState<number | string>('');
-  const [selectedMechanicId, setSelectedMechanicId] = useState(currentUser.id || mechanics[0]?.id || '');
-  const [showCoMechanic, setShowCoMechanic] = useState(!!initialSrvCfg?.coMechanicId);
-  const [coMechanicId, setCoMechanicId] = useState(initialSrvCfg?.coMechanicId || '');
-  const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>(initialSrvCfg?.coMechanicEarning ?? '');
+  const [selectedMechanicId, setSelectedMechanicId] = useState(initialMechId);
+  const [showCoMechanic, setShowCoMechanic] = useState(!!initialEmpCo?.coMechanicId);
+  const [coMechanicId, setCoMechanicId] = useState(initialEmpCo?.coMechanicId || '');
+  const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>(initialEmpCo?.coMechanicEarning ?? '');
   const [serviceError, setServiceError] = useState('');
 
   // Admin edit form
@@ -467,7 +469,24 @@ export default function OrderDetailsView({
 
                   <div>
                     <label className="block text-[10px] text-slate-400 mb-0.5">შემსრულებელი *</label>
-                    <select disabled={isMechanic} value={selectedMechanicId} onChange={e => setSelectedMechanicId(e.target.value)}
+                    <select value={selectedMechanicId} onChange={e => {
+                        const newMechId = e.target.value;
+                        setSelectedMechanicId(newMechId);
+                        const cfg = serviceConfigs.find(c => c.id === serviceType);
+                        const empCo = cfg?.employeeRewards?.[newMechId];
+                        if (empCo?.coMechanicId) {
+                          const earning = empCo.coMechanicRewardType === 'percentage'
+                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (empCo.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
+                            : (empCo.coMechanicEarning ?? '');
+                          setCoMechanicId(empCo.coMechanicId);
+                          setCoMechanicEarning(earning);
+                          setShowCoMechanic(true);
+                        } else {
+                          setShowCoMechanic(false);
+                          setCoMechanicId('');
+                          setCoMechanicEarning('');
+                        }
+                      }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
                       {mechanics.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                     </select>
