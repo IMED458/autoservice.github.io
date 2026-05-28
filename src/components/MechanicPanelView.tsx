@@ -50,10 +50,18 @@ function OwnerProfitView({
   sundayLocal.setDate(mondayLocal.getDate() + 6);
   sundayLocal.setHours(23, 59, 59, 999);
 
+  // Owner IDs — their earnings stay as profit, not wages
+  const ownerIds = new Set(allUsers.filter(u => u.role === 'super_admin').map(u => u.id));
+
   // Helper: compute revenue + wages for a set of services filtered by order dates
+  // Owner's own earnings are NOT counted as wages (they roll into profit)
   const computeStats = (srvList: ServiceItem[]) => {
     const revenue = srvList.reduce((s, x) => s + x.price, 0);
-    const wages = srvList.reduce((s, x) => s + x.mechanicEarning + (x.coMechanicEarning || 0), 0);
+    const wages = srvList.reduce((s, x) => {
+      const mechWage = ownerIds.has(x.mechanicId) ? 0 : x.mechanicEarning;
+      const coWage = (x.coMechanicId && ownerIds.has(x.coMechanicId)) ? 0 : (x.coMechanicEarning || 0);
+      return s + mechWage + coWage;
+    }, 0);
     return { revenue, wages, profit: revenue - wages };
   };
 
@@ -96,7 +104,7 @@ function OwnerProfitView({
   const filteredStats = computeStats(filteredServices);
 
   // Per-employee wages (all time)
-  const nonOwnerUsers = allUsers.filter(u => u.role !== 'super_admin');
+  const nonOwnerUsers = allUsers.filter(u => !ownerIds.has(u.id) && u.username !== 'imedo');
   const employeeWages = nonOwnerUsers.map(u => {
     const wages = services.reduce((sum, s) => {
       if (s.mechanicId === u.id) return sum + s.mechanicEarning;
