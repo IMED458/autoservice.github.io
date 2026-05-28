@@ -155,11 +155,9 @@ export default function ProductsSection({
   const handleConfirmRefill = (e: React.FormEvent) => {
     e.preventDefault();
     if (!refillTarget || refillQuantity <= 0) return;
-
-    onRefillStock(refillTarget.id, refillQuantity, refillPrice, refillNote.trim());
+    onRefillStock(refillTarget.id, refillQuantity, refillTarget.purchasePrice, '');
     setRefillTarget(null);
     setRefillQuantity(0);
-    setRefillPrice(0);
   };
 
   const handleOpenRefill = (p: Product) => {
@@ -611,69 +609,43 @@ export default function ProductsSection({
               </div>
             </div>
 
-            <form onSubmit={handleConfirmRefill} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შესასყიდი რაოდენობა</label>
-                  <input
-                    type="number"
-                    required
-                    min="1"
-                    value={refillQuantity}
-                    onChange={(e) => setRefillQuantity(Number(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-850 rounded px-2 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold text-cyan-400"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შესასყიდი ფასი ერთეულზე (₾)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0.1"
-                    step="0.01"
-                    value={refillPrice}
-                    onChange={(e) => setRefillPrice(Number(e.target.value) || 0)}
-                    className="w-full bg-slate-950 border border-slate-850 rounded px-2 py-1.5 focus:outline-none text-slate-100 text-center font-mono font-bold text-amber-500"
-                  />
-                </div>
-              </div>
-
+            <form onSubmit={handleConfirmRefill} className="space-y-4">
               <div>
-                <label className="block text-[9px] uppercase font-bold text-slate-400 mb-1">შენიშვნა / ოფიციალური მომწოდებელი</label>
+                <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1.5">
+                  დასამატებელი რაოდენობა ({refillTarget.unit})
+                </label>
                 <input
-                  type="text"
+                  type="number"
                   required
-                  value={refillNote}
-                  onChange={(e) => setRefillNote(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-850 rounded px-2.5 py-1.5 focus:outline-none text-slate-200"
+                  min="1"
+                  value={refillQuantity}
+                  onChange={(e) => setRefillQuantity(Number(e.target.value) || 0)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-3 focus:outline-none focus:border-cyan-500/60 text-slate-100 text-center font-mono font-black text-2xl text-cyan-400"
+                  autoFocus
                 />
               </div>
 
-              <div className="p-2.5 bg-cyan-950/20 rounded-lg border border-cyan-500/10 text-[10px] text-slate-400 space-y-1">
-                <p className="flex justify-between">
-                  <span>მიმწოდებლის ჯამი:</span>
-                  <span className="font-mono text-cyan-400 font-bold">{(refillQuantity * refillPrice).toLocaleString()} ₾</span>
-                </p>
-                <p className="flex justify-between text-[9px] text-slate-500">
-                  <span>მარაგი შევსების შემდეგ:</span>
-                  <span className="font-mono">{refillTarget.stock + refillQuantity} {refillTarget.unit}</span>
-                </p>
+              <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-xs text-slate-400 flex justify-between items-center">
+                <span>მარაგი შევსების შემდეგ:</span>
+                <span className="font-mono font-black text-amber-400">
+                  {refillTarget.stock} + {refillQuantity} = <span className="text-cyan-400">{refillTarget.stock + refillQuantity}</span> {refillTarget.unit}
+                </span>
               </div>
 
-              <div className="flex justify-end gap-2 pt-2.5 border-t border-slate-800 font-sans select-none">
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setRefillTarget(null)}
-                  className="px-3 py-1 bg-slate-950 border border-slate-850 text-slate-400 rounded hover:bg-slate-900 cursor-pointer"
+                  className="py-2.5 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl font-semibold cursor-pointer hover:bg-slate-800 transition-colors"
                 >
                   გაუქმება
                 </button>
                 <button
                   id="submit-refill-qty-btn"
                   type="submit"
-                  className="px-4 py-1.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black rounded cursor-pointer"
+                  className="py-2.5 bg-cyan-500 hover:bg-cyan-600 text-slate-950 font-black rounded-xl cursor-pointer active:scale-[0.98] transition-all"
                 >
-                  ორდერის გაშვება
+                  მარაგის შევსება
                 </button>
               </div>
             </form>

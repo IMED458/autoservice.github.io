@@ -23,12 +23,14 @@ export default function OrderDetailsView({
   order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack, onDeleteOrder,
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
-  const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'manager';
 
   const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
   const [draftServices, setDraftServices] = useState<ServiceItem[]>(() =>
     services.filter(s => s.orderId === order.id)
   );
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     setDraftOrder({ ...order });
@@ -314,11 +316,60 @@ export default function OrderDetailsView({
             )}
           </div>
 
+          {/* Assigned Employees (admin can change) */}
+          {isAdminLike && (
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2 flex items-center gap-1.5">
+                <UserPlus className="w-3.5 h-3.5 text-cyan-400" /> მინიჭებული შემსრულებლები
+              </h3>
+              <div className="grid grid-cols-2 gap-2">
+                {allUsers.filter(u => u.role !== 'super_admin').map(u => {
+                  const assigned = (draftOrder.assignedEmployeeIds || []).includes(u.id);
+                  return (
+                    <button
+                      key={u.id}
+                      type="button"
+                      onClick={() => {
+                        const cur = draftOrder.assignedEmployeeIds || [];
+                        const next = assigned ? cur.filter(id => id !== u.id) : [...cur, u.id];
+                        setDraftOrder(prev => ({ ...prev, assignedEmployeeIds: next.length > 0 ? next : undefined }));
+                      }}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-left transition-all cursor-pointer ${
+                        assigned
+                          ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300'
+                          : 'bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-600'
+                      }`}
+                    >
+                      <div className={`w-2 h-2 rounded-full flex-shrink-0 ${assigned ? 'bg-cyan-400' : 'bg-slate-700'}`} />
+                      <span className="text-xs font-semibold truncate">{u.firstName} {u.lastName}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Save button — visible on desktop in left column */}
-          <div className="hidden md:block">
-            <button onClick={() => onSaveTransaction(order.id, draftOrder, draftServices)}
-              className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl text-xs uppercase tracking-widest cursor-pointer active:scale-95 hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2">
-              <Save className="w-4 h-4 stroke-[2.5]" /> ყველა ცვლილების შენახვა
+          <div className="hidden md:block space-y-2">
+            {saveError && (
+              <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 text-xs rounded-xl">
+                {saveError}
+              </div>
+            )}
+            <button
+              disabled={saving}
+              onClick={async () => {
+                if (saving) return;
+                setSaving(true); setSaveError('');
+                try { await onSaveTransaction(order.id, draftOrder, draftServices); }
+                catch (e: any) { setSaveError('შენახვა ვერ მოხერხდა. სცადეთ თავიდან.'); }
+                finally { setSaving(false); }
+              }}
+              className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl uppercase tracking-widest cursor-pointer active:scale-95 hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              {saving
+                ? <><div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" /> შენახვა...</>
+                : <><Save className="w-4 h-4 stroke-[2.5]" /> ყველა ცვლილების შენახვა</>}
             </button>
           </div>
         </div>
@@ -590,10 +641,26 @@ export default function OrderDetailsView({
       </div>
 
       {/* Save Button — mobile only (desktop version is in left column) */}
-      <div className="pt-2 pb-6 md:hidden">
-        <button onClick={() => onSaveTransaction(order.id, draftOrder, draftServices)}
-          className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl text-xs uppercase tracking-widest cursor-pointer active:scale-95 hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2">
-          <Save className="w-4 h-4 stroke-[2.5]" /> ყველა ცვლილების შენახვა
+      <div className="pt-2 pb-6 md:hidden space-y-2">
+        {saveError && (
+          <div className="p-2.5 bg-red-950/40 border border-red-500/30 text-red-400 text-xs rounded-xl">
+            {saveError}
+          </div>
+        )}
+        <button
+          disabled={saving}
+          onClick={async () => {
+            if (saving) return;
+            setSaving(true); setSaveError('');
+            try { await onSaveTransaction(order.id, draftOrder, draftServices); }
+            catch (e: any) { setSaveError('შენახვა ვერ მოხერხდა. სცადეთ თავიდან.'); }
+            finally { setSaving(false); }
+          }}
+          className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl uppercase tracking-widest cursor-pointer active:scale-[0.98] hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+        >
+          {saving
+            ? <><div className="w-4 h-4 border-2 border-slate-950/30 border-t-slate-950 rounded-full animate-spin" /> შენახვა...</>
+            : <><Save className="w-4 h-4 stroke-[2.5]" /> ყველა ცვლილების შენახვა</>}
         </button>
       </div>
     </motion.div>

@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'admin' | 'mechanic';
+export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic';
 
 export interface User {
   id: string;
@@ -28,6 +28,8 @@ export interface CarServiceOrder {
   createdBy: string;
   createdAt: string;
   updatedAt: string;
+  assignedEmployeeIds?: string[];   // employees assigned to this order
+  assignedServiceType?: string;     // optional service type hint at registration
 }
 
 export type ServiceType = string;
@@ -154,8 +156,9 @@ export interface CarBrand {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
-  super_admin: 'სუპერ ადმინისტრატორი',
+  super_admin: 'მფლობელი',
   admin: 'ადმინისტრატორი',
+  manager: 'მენეჯერი',
   mechanic: 'ხელოსანი',
 };
 
@@ -211,4 +214,9 @@ export function calculateMechanicEarning(
 
 export function hasModule(user: User, mod: string): boolean {
   return user.role === 'super_admin' || (user.enabledModules ?? []).includes(mod);
+}
+
+/** Returns true for roles that have dashboard/admin-like access */
+export function isAdminRole(role: Role): boolean {
+  return role === 'super_admin' || role === 'admin' || role === 'manager';
 }

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { db } from './firebase';
@@ -100,7 +100,7 @@ export default function App() {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('auto_service_current_user', JSON.stringify(currentUser));
-      if (currentUser.role === 'super_admin' || currentUser.role === 'admin') {
+      if (isAdminRole(currentUser.role)) {
         setCurrentTab('dashboard');
       } else {
         setCurrentTab('all-orders');
@@ -141,7 +141,6 @@ export default function App() {
   ) => {
     const batch = writeBatch(db);
     batch.set(doc(db, 'orders', orderId), { ...updatedOrder, updatedAt: new Date().toISOString() });
-    // Delete old services for this order
     const oldSrvs = services.filter(s => s.orderId === orderId);
     oldSrvs.forEach(s => batch.delete(doc(db, 'services', s.id)));
     updatedServices.forEach(s => batch.set(doc(db, 'services', s.id), s));
@@ -166,7 +165,6 @@ export default function App() {
   const handleSaveServiceConfigs = async (configs: ServiceTypeConfig[]) => {
     const batch = writeBatch(db);
     configs.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
-    // Delete removed configs
     const toDelete = serviceConfigs.filter(sc => !configs.find(c => c.id === sc.id));
     toDelete.forEach(c => batch.delete(doc(db, 'serviceConfigs', c.id)));
     await batch.commit();
@@ -180,7 +178,6 @@ export default function App() {
     await batch.commit();
   };
 
-  // Shop handlers
   const handleAddProduct = async (prod: Omit<Product, 'id' | 'soldQuantity' | 'createdAt'>) => {
     const id = `prod-${Date.now()}`;
     const p: Product = { ...prod, id, soldQuantity: 0, createdAt: new Date().toISOString() };
@@ -205,7 +202,6 @@ export default function App() {
     const id = `sale-${Date.now()}`;
     const s: ProductSale = { ...sale, id, createdAt: new Date().toISOString() };
     await setDoc(doc(db, 'productSales', id), s);
-    // Reduce stock
     const batch = writeBatch(db);
     sale.items.forEach(item => {
       const prod = products.find(p => p.id === item.productId);
@@ -251,7 +247,8 @@ export default function App() {
 
   const currentSelectedOrder = orders.find(o => o.id === selectedOrderId);
   const mechanicsList = users.filter(u => u.role === 'mechanic');
-  const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin';
+  const isAdminLike = isAdminRole(currentUser.role);
+  const serviceTypeNames = serviceConfigs.map(c => ({ id: c.id, name: c.name }));
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col antialiased">
@@ -263,6 +260,8 @@ export default function App() {
             <motion.div key="register-car" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.2 }}>
               <OrderFormView
                 carBrands={carBrands}
+                allUsers={users}
+                serviceTypeNames={serviceTypeNames}
                 onAddOrder={handleAddOrder}
                 onCancel={() => { setActiveView('regular-tab'); setCurrentTab('dashboard'); }}
               />
@@ -285,23 +284,118 @@ export default function App() {
             <motion.div key={currentTab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} transition={{ duration: 0.15 }} className="py-1">
               {isAdminLike && (
                 <>
-                  {currentTab === 'dashboard' && <DashboardView orders={orders} currentUser={currentUser} onSelectOrder={handleSelectOrder} onOpenAddOrder={handleOpenAddOrder} />}
-                  {currentTab === 'history' && <HistoryView orders={orders} services={services} mechanics={mechanicsList} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
-                  {currentTab === 'employees' && <EmployeesView users={users} currentUser={currentUser} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />}
-                  {currentTab === 'reports' && <ReportsView orders={orders} services={services} mechanics={mechanicsList} allUsers={users} />}
-                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <StoreView currentUser={currentUser} orders={orders} services={services} />}
-                  {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && <DayClosingSection orders={orders} services={services} productSales={productSales} dailyClosings={dailyClosings} currentUser={currentUser} onConfirmCloseDay={handleConfirmCloseDay} />}
-                  {currentTab === 'settings' && <SettingsView serviceConfigs={serviceConfigs} carBrands={carBrands} users={users} currentUser={currentUser} onSaveServiceConfigs={handleSaveServiceConfigs} onSaveCarBrands={handleSaveCarBrands} onUpdateUser={handleUpdateUser} />}
-                  {currentTab === 'earnings' && <MechanicPanelView orders={orders} services={services} currentUser={currentUser} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
+                  {currentTab === 'dashboard' && (
+                    <DashboardView
+                      orders={orders}
+                      currentUser={currentUser}
+                      allUsers={users}
+                      onSelectOrder={handleSelectOrder}
+                      onOpenAddOrder={handleOpenAddOrder}
+                    />
+                  )}
+                  {currentTab === 'history' && (
+                    <HistoryView
+                      orders={orders}
+                      services={services}
+                      mechanics={mechanicsList}
+                      serviceConfigs={serviceConfigs}
+                      onSelectOrder={handleSelectOrder}
+                    />
+                  )}
+                  {currentTab === 'employees' && (
+                    <EmployeesView
+                      users={users}
+                      currentUser={currentUser}
+                      onAddUser={handleAddUser}
+                      onUpdateUser={handleUpdateUser}
+                      onDeleteUser={handleDeleteUser}
+                    />
+                  )}
+                  {currentTab === 'reports' && (
+                    <ReportsView
+                      orders={orders}
+                      services={services}
+                      mechanics={mechanicsList}
+                      allUsers={users}
+                    />
+                  )}
+                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && (
+                    <StoreView currentUser={currentUser} orders={orders} services={services} />
+                  )}
+                  {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && (
+                    <DayClosingSection
+                      orders={orders}
+                      services={services}
+                      productSales={productSales}
+                      dailyClosings={dailyClosings}
+                      currentUser={currentUser}
+                      onConfirmCloseDay={handleConfirmCloseDay}
+                    />
+                  )}
+                  {currentTab === 'settings' && (currentUser.role === 'super_admin' || currentUser.role === 'admin') && (
+                    <SettingsView
+                      serviceConfigs={serviceConfigs}
+                      carBrands={carBrands}
+                      users={users}
+                      currentUser={currentUser}
+                      onSaveServiceConfigs={handleSaveServiceConfigs}
+                      onSaveCarBrands={handleSaveCarBrands}
+                      onUpdateUser={handleUpdateUser}
+                    />
+                  )}
+                  {currentTab === 'earnings' && (
+                    <MechanicPanelView
+                      orders={orders}
+                      services={services}
+                      currentUser={currentUser}
+                      serviceConfigs={serviceConfigs}
+                      onSelectOrder={handleSelectOrder}
+                    />
+                  )}
                 </>
               )}
               {currentUser.role === 'mechanic' && (
                 <>
-                  {currentTab === 'mechanic-dashboard' && <MechanicPanelView orders={orders} services={services} currentUser={currentUser} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
-                  {currentTab === 'all-orders' && <DashboardView orders={orders} currentUser={currentUser} onSelectOrder={handleSelectOrder} onOpenAddOrder={handleOpenAddOrder} />}
-                  {currentTab === 'history' && <HistoryView orders={orders} services={services} mechanics={mechanicsList} serviceConfigs={serviceConfigs} onSelectOrder={handleSelectOrder} />}
-                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && <StoreView currentUser={currentUser} orders={orders} services={services} />}
-                  {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && <DayClosingSection orders={orders} services={services} productSales={productSales} dailyClosings={dailyClosings} currentUser={currentUser} onConfirmCloseDay={handleConfirmCloseDay} />}
+                  {currentTab === 'mechanic-dashboard' && (
+                    <MechanicPanelView
+                      orders={orders}
+                      services={services}
+                      currentUser={currentUser}
+                      serviceConfigs={serviceConfigs}
+                      onSelectOrder={handleSelectOrder}
+                    />
+                  )}
+                  {currentTab === 'all-orders' && (
+                    <DashboardView
+                      orders={orders}
+                      currentUser={currentUser}
+                      allUsers={users}
+                      onSelectOrder={handleSelectOrder}
+                      onOpenAddOrder={handleOpenAddOrder}
+                    />
+                  )}
+                  {currentTab === 'history' && (
+                    <HistoryView
+                      orders={orders}
+                      services={services}
+                      mechanics={mechanicsList}
+                      serviceConfigs={serviceConfigs}
+                      onSelectOrder={handleSelectOrder}
+                    />
+                  )}
+                  {currentTab === 'shop' && hasModule(currentUser, 'shop') && (
+                    <StoreView currentUser={currentUser} orders={orders} services={services} />
+                  )}
+                  {currentTab === 'day-closing' && hasModule(currentUser, 'day_closing') && (
+                    <DayClosingSection
+                      orders={orders}
+                      services={services}
+                      productSales={productSales}
+                      dailyClosings={dailyClosings}
+                      currentUser={currentUser}
+                      onConfirmCloseDay={handleConfirmCloseDay}
+                    />
+                  )}
                 </>
               )}
             </motion.div>

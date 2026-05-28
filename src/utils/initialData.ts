@@ -3,19 +3,29 @@ import { hashPassword } from './crypto';
 
 export const INITIAL_USERS: User[] = [
   {
+    id: 'usr-owner-1',
+    firstName: 'ზვიადი',
+    lastName: '',
+    username: 'zviad',
+    passwordHash: hashPassword('zviad123'),
+    role: 'super_admin',
+    enabledModules: ['shop', 'day_closing', 'reports'],
+    createdAt: '2026-01-01T10:00:00Z',
+  },
+  {
     id: 'usr-admin-1',
-    firstName: 'ლაშა',
-    lastName: 'კალანდაძე',
+    firstName: 'გიორგი',
+    lastName: 'იმედაშვილი',
     username: 'admin',
     passwordHash: hashPassword('admin'),
-    role: 'super_admin',
+    role: 'admin',
     enabledModules: ['shop', 'day_closing', 'reports'],
     createdAt: '2026-05-01T10:00:00Z',
   },
   {
     id: 'usr-mech-1',
     firstName: 'გიორგი',
-    lastName: 'იმედაშვილი',
+    lastName: 'ბერიძე',
     username: 'giorgi',
     passwordHash: hashPassword('pass123'),
     role: 'mechanic',

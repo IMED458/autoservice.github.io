@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { User, Role, ROLE_LABELS, hasModule } from '../types';
+import { User, Role, ROLE_LABELS } from '../types';
 import { hashPassword } from '../utils/crypto';
-import { Users, UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X } from 'lucide-react';
+import { UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface EmployeesViewProps {
@@ -14,6 +14,7 @@ interface EmployeesViewProps {
 
 export default function EmployeesView({ users, currentUser, onAddUser, onUpdateUser, onDeleteUser }: EmployeesViewProps) {
   const isSuperAdmin = currentUser.role === 'super_admin';
+  const isAdmin = currentUser.role === 'admin';
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [firstName, setFirstName] = useState('');
@@ -35,8 +36,8 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!firstName.trim() || !lastName.trim() || !username.trim() || !password.trim()) {
-      setError('გთხოვთ შეავსოთ ყველა ველი');
+    if (!firstName.trim() || !username.trim() || !password.trim()) {
+      setError('გთხოვთ შეავსოთ სახელი, იუზერნეიმი და პაროლი');
       return;
     }
     if (users.some(u => u.username.toLowerCase() === username.trim().toLowerCase())) {
@@ -54,6 +55,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     setSuccess('თანამშრომელი დაემატა!');
     setFirstName(''); setLastName(''); setUsername(''); setPassword('');
     setRole('mechanic'); setShowAddForm(false);
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   const openEdit = (u: User) => {
@@ -79,6 +81,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     onUpdateUser(editingUser.id, updates);
     setEditingUser(null);
     setSuccess('ცვლილებები შენახულია!');
+    setTimeout(() => setSuccess(''), 3000);
   };
 
   const toggleModule = (mod: string) => {
@@ -91,60 +94,131 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     { id: 'reports', label: 'ფინანსური ანგარიში' },
   ];
 
+  const getRoleIcon = (r: Role) => {
+    if (r === 'super_admin') return <Crown className="w-4 h-4" />;
+    if (r === 'admin') return <Shield className="w-4 h-4" />;
+    if (r === 'manager') return <Shield className="w-4 h-4" />;
+    return <Wrench className="w-4 h-4" />;
+  };
+
+  const getRoleStyle = (r: Role) => {
+    if (r === 'super_admin') return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
+    if (r === 'admin') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
+    if (r === 'manager') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400';
+    return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400';
+  };
+
+  // Available roles for creation based on current user
+  const availableRoles: { value: Role; label: string }[] = isSuperAdmin
+    ? [
+        { value: 'mechanic', label: 'ხელოსანი' },
+        { value: 'admin', label: 'ადმინი' },
+        { value: 'manager', label: 'მენეჯერი' },
+      ]
+    : [
+        { value: 'mechanic', label: 'ხელოსანი' },
+        { value: 'manager', label: 'მენეჯერი' },
+      ];
+
+  const canEdit = (u: User) => {
+    if (u.id === currentUser.id) return true; // anyone can edit themselves
+    if (isSuperAdmin) return true;
+    if (isAdmin && u.role === 'mechanic') return true;
+    return false;
+  };
+
+  const canDelete = (u: User) => {
+    if (u.id === currentUser.id) return false;
+    if (u.role === 'super_admin') return false;
+    if (isSuperAdmin) return true;
+    if (isAdmin && u.role === 'mechanic') return true;
+    return false;
+  };
+
+  // Available edit roles
+  const editRoles: { value: Role; label: string }[] = isSuperAdmin
+    ? [
+        { value: 'mechanic', label: 'ხელოსანი' },
+        { value: 'admin', label: 'ადმინი' },
+        { value: 'manager', label: 'მენეჯერი' },
+      ]
+    : [
+        { value: 'mechanic', label: 'ხელოსანი' },
+        { value: 'manager', label: 'მენეჯერი' },
+      ];
+
   return (
     <div className="max-w-lg mx-auto p-4 pb-28 bg-slate-950 text-slate-100 font-sans md:max-w-2xl">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-bold text-slate-300">პერსონალის მართვა ({users.length})</h3>
-        <button
-          onClick={() => { setShowAddForm(!showAddForm); setError(''); setSuccess(''); }}
-          className="flex items-center gap-1 text-[11px] text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-1.5 rounded-xl cursor-pointer">
-          <UserPlus className="w-3.5 h-3.5" />
-          {showAddForm ? 'დახურვა' : 'თანამშრომლის დამატება'}
-        </button>
+        <h3 className="text-sm font-bold text-slate-300">პერსონალი ({users.length})</h3>
+        {(isSuperAdmin || isAdmin) && (
+          <button
+            onClick={() => { setShowAddForm(!showAddForm); setError(''); }}
+            className="flex items-center gap-1.5 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-2 rounded-xl cursor-pointer transition-colors">
+            <UserPlus className="w-3.5 h-3.5" />
+            {showAddForm ? 'დახურვა' : 'დამატება'}
+          </button>
+        )}
       </div>
 
-      {success && <div className="p-3 bg-green-950/40 border border-green-500/20 text-green-400 text-xs rounded-xl mb-3">{success}</div>}
-      {error && <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-500 text-xs rounded-xl mb-3 flex items-center gap-1.5"><AlertCircle className="w-4 h-4" />{error}</div>}
+      {success && (
+        <div className="p-3 bg-green-950/40 border border-green-500/20 text-green-400 text-xs rounded-xl mb-3">
+          {success}
+        </div>
+      )}
+      {error && (
+        <div className="p-3 bg-red-950/40 border border-red-500/20 text-red-400 text-xs rounded-xl mb-3 flex items-center gap-1.5">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />{error}
+        </div>
+      )}
 
       {showAddForm && (
-        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-          className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-4 shadow-xl space-y-4">
-          <h3 className="text-sm font-bold text-amber-500">ახალი თანამშრომლის რეგისტრაცია</h3>
-          <form onSubmit={handleSubmit} className="space-y-3 text-xs">
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">სახელი *</label>
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="სახელი"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">გვარი *</label>
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="გვარი"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">იუზერნეიმი *</label>
-              <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">პაროლი *</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="პაროლი"
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-700 focus:outline-none" />
-            </div>
-            <div>
-              <label className="block text-slate-400 font-semibold mb-1">როლი *</label>
-              <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl">
-                <button type="button" onClick={() => setRole('mechanic')}
-                  className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${role === 'mechanic' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>
-                  ხელოსანი
-                </button>
-                <button type="button" onClick={() => setRole('admin')}
-                  className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${role === 'admin' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>
-                  ადმინი
-                </button>
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          className="bg-slate-900 border border-slate-800 rounded-2xl p-5 mb-4 shadow-xl space-y-4 overflow-hidden"
+        >
+          <h3 className="text-sm font-bold text-amber-500">ახალი თანამშრომლის დამატება</h3>
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">სახელი *</label>
+                <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="სახელი"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-700 focus:outline-none focus:border-amber-500/50" />
+              </div>
+              <div>
+                <label className="block text-[11px] text-slate-400 font-semibold mb-1">გვარი</label>
+                <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="გვარი"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-700 focus:outline-none focus:border-amber-500/50" />
               </div>
             </div>
-            <button type="submit" className="w-full py-2.5 mt-2 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-extrabold rounded-xl text-xs cursor-pointer">
+            <div>
+              <label className="block text-[11px] text-slate-400 font-semibold mb-1">იუზერნეიმი *</label>
+              <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="username (ლათინური)"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-700 focus:outline-none focus:border-amber-500/50 font-mono" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 font-semibold mb-1">პაროლი *</label>
+              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-700 focus:outline-none focus:border-amber-500/50" />
+            </div>
+            <div>
+              <label className="block text-[11px] text-slate-400 font-semibold mb-1.5">როლი *</label>
+              <div className={`grid gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl`}
+                style={{ gridTemplateColumns: `repeat(${availableRoles.length}, 1fr)` }}>
+                {availableRoles.map(r => (
+                  <button
+                    key={r.value}
+                    type="button"
+                    onClick={() => setRole(r.value)}
+                    className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${role === r.value ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <button type="submit" className="w-full py-3 mt-1 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-xl cursor-pointer active:scale-[0.98] transition-all">
               შენახვა და დამატება
             </button>
           </form>
@@ -156,40 +230,37 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
           const isOwn = user.id === currentUser.id;
           return (
             <div key={user.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-lg border ${
-                  user.role === 'super_admin' ? 'bg-purple-500/10 border-purple-500/20 text-purple-400'
-                  : user.role === 'admin' ? 'bg-amber-500/10 border-amber-500/20 text-amber-400'
-                  : 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400'}`}>
-                  {user.role === 'mechanic' ? <Wrench className="w-4 h-4" /> : <Shield className="w-5 h-5" />}
+              <div className="flex items-center gap-3 min-w-0">
+                <div className={`p-2.5 rounded-xl border flex-shrink-0 ${getRoleStyle(user.role)}`}>
+                  {getRoleIcon(user.role)}
                 </div>
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-200">
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-slate-200 truncate">
                     {user.firstName} {user.lastName}
                     {isOwn && <span className="text-[10px] text-slate-500 ml-1">(თქვენ)</span>}
                   </h4>
-                  <div className="flex flex-wrap items-center gap-x-2 text-xs text-slate-500 mt-0.5">
-                    <span>@{user.username}</span>
-                    <span>•</span>
-                    <span>{ROLE_LABELS[user.role]}</span>
+                  <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+                    <span className="font-mono">@{user.username}</span>
+                    <span>·</span>
+                    <span className="truncate">{ROLE_LABELS[user.role]}</span>
                     {(user.enabledModules ?? []).length > 0 && (
-                      <span className="text-[9px] text-amber-500/70">• {(user.enabledModules ?? []).length} მოდული</span>
+                      <span className="text-[9px] text-amber-500/60">· {(user.enabledModules ?? []).length} მოდული</span>
                     )}
                   </div>
                 </div>
               </div>
 
-              <div className="flex items-center gap-1.5">
-                {(isSuperAdmin || isOwn) && (
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {canEdit(user) && (
                   <button onClick={() => openEdit(user)}
-                    className="p-2 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-amber-400 rounded-xl cursor-pointer">
+                    className="p-2 bg-slate-950 border border-slate-800 hover:bg-slate-800 text-amber-400 rounded-xl cursor-pointer transition-colors">
                     <Edit className="w-3.5 h-3.5" />
                   </button>
                 )}
-                {!isOwn && isSuperAdmin && (
+                {canDelete(user) && (
                   <button onClick={() => { if (confirm(`წაიშალოს ${user.firstName}?`)) onDeleteUser(user.id); }}
-                    className="p-2.5 bg-red-950/25 hover:bg-red-950/45 border border-red-500/25 text-red-400 rounded-xl cursor-pointer">
-                    <Trash2 className="w-4 h-4" />
+                    className="p-2 bg-red-950/25 hover:bg-red-950/45 border border-red-500/25 text-red-400 rounded-xl cursor-pointer transition-colors">
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
@@ -200,77 +271,91 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
 
       {/* Edit Modal */}
       {editingUser && (
-        <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 space-y-4">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+          >
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-black text-slate-100">თანამშრომლის რედაქტირება</h3>
-              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-slate-200 cursor-pointer"><X className="w-4 h-4" /></button>
+              <h3 className="font-black text-slate-100">რედაქტირება</h3>
+              <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-slate-200 cursor-pointer p-1">
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="space-y-3 text-xs">
+            <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-slate-400 mb-1">სახელი</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">სახელი</label>
                   <input type="text" value={editFirst} onChange={e => setEditFirst(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none" />
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/50" />
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">გვარი</label>
+                  <label className="block text-[11px] text-slate-400 mb-1">გვარი</label>
                   <input type="text" value={editLast} onChange={e => setEditLast(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:outline-none" />
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/50" />
                 </div>
               </div>
               <div>
-                <label className="block text-slate-400 mb-1">ახალი პაროლი (სურვილისამებრ)</label>
+                <label className="block text-[11px] text-slate-400 mb-1">ახალი პაროლი (სურვილისამებრ)</label>
                 <input type="password" value={editPassword} onChange={e => setEditPassword(e.target.value)}
                   placeholder="ცარიელი = არ შეიცვლება"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 placeholder-slate-600 focus:outline-none" />
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500/50" />
               </div>
 
-              {isSuperAdmin && editingUser.id !== currentUser.id && (
+              {(isSuperAdmin || isAdmin) && editingUser.id !== currentUser.id && editingUser.role !== 'super_admin' && (
                 <>
                   <div>
-                    <label className="block text-slate-400 mb-1">როლი</label>
-                    <div className="grid grid-cols-2 gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl">
-                      <button type="button" onClick={() => setEditRole('mechanic')}
-                        className={`py-1.5 text-[11px] font-bold rounded-lg cursor-pointer ${editRole === 'mechanic' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>
-                        ხელოსანი
-                      </button>
-                      <button type="button" onClick={() => setEditRole('admin')}
-                        className={`py-1.5 text-[11px] font-bold rounded-lg cursor-pointer ${editRole === 'admin' ? 'bg-amber-500 text-slate-950' : 'text-slate-400'}`}>
-                        ადმინი
-                      </button>
+                    <label className="block text-[11px] text-slate-400 mb-1.5">როლი</label>
+                    <div className={`grid gap-2 bg-slate-950 p-1 border border-slate-800 rounded-xl`}
+                      style={{ gridTemplateColumns: `repeat(${editRoles.length}, 1fr)` }}>
+                      {editRoles.map(r => (
+                        <button
+                          key={r.value}
+                          type="button"
+                          onClick={() => setEditRole(r.value)}
+                          className={`py-2 text-[11px] font-bold rounded-lg cursor-pointer transition-all ${editRole === r.value ? 'bg-amber-500 text-slate-950' : 'text-slate-400 hover:text-slate-200'}`}
+                        >
+                          {r.label}
+                        </button>
+                      ))}
                     </div>
                   </div>
                   <div>
-                    <label className="block text-slate-400 mb-2">ჩართული მოდულები:</label>
-                    <div className="space-y-2">
+                    <label className="block text-[11px] text-slate-400 mb-2">ჩართული მოდულები</label>
+                    <div className="space-y-2.5">
                       {allModules.map(mod => (
-                        <label key={mod.id} className="flex items-center gap-2.5 cursor-pointer select-none">
-                          <div onClick={() => toggleModule(mod.id)}
-                            className={`w-10 h-5 rounded-full transition-all relative cursor-pointer ${editModules.includes(mod.id) ? 'bg-amber-500' : 'bg-slate-700'}`}>
-                            <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editModules.includes(mod.id) ? 'left-5' : 'left-0.5'}`} />
-                          </div>
-                          <span className={`text-[11px] font-semibold ${editModules.includes(mod.id) ? 'text-amber-400' : 'text-slate-400'}`}>{mod.label}</span>
-                        </label>
+                        <div key={mod.id} className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${editModules.includes(mod.id) ? 'text-amber-400' : 'text-slate-400'}`}>
+                            {mod.label}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => toggleModule(mod.id)}
+                            className={`w-11 h-6 rounded-full transition-all relative cursor-pointer flex-shrink-0 ${editModules.includes(mod.id) ? 'bg-amber-500' : 'bg-slate-700'}`}
+                          >
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all ${editModules.includes(mod.id) ? 'left-6' : 'left-1'}`} />
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
                 </>
               )}
 
-              <div className="grid grid-cols-2 gap-2 pt-2">
+              <div className="grid grid-cols-2 gap-2 pt-1">
                 <button type="button" onClick={() => setEditingUser(null)}
-                  className="py-2 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl text-xs font-semibold cursor-pointer">
+                  className="py-2.5 bg-slate-950 border border-slate-800 text-slate-400 rounded-xl text-xs font-semibold cursor-pointer">
                   გაუქმება
                 </button>
                 <button type="button" onClick={handleSaveEdit}
-                  className="py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black cursor-pointer flex items-center justify-center gap-1">
+                  className="py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-xl text-xs font-black cursor-pointer flex items-center justify-center gap-1 active:scale-[0.98] transition-all">
                   <Save className="w-3.5 h-3.5" /> შენახვა
                 </button>
               </div>
             </div>
-          </div>
+          </motion.div>
         </div>
       )}
     </div>
