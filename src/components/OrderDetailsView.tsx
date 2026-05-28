@@ -44,7 +44,7 @@ export default function OrderDetailsView({
   const [serviceType, setServiceType] = useState<string>(initialSrvType);
   const [serviceDescription, setServiceDescription] = useState('');
   const [servicePrice, setServicePrice] = useState<number | string>('');
-  const [selectedMechanicId, setSelectedMechanicId] = useState(isMechanic ? currentUser.id : mechanics[0]?.id || '');
+  const [selectedMechanicId, setSelectedMechanicId] = useState(currentUser.id || mechanics[0]?.id || '');
   const [showCoMechanic, setShowCoMechanic] = useState(!!initialSrvCfg?.coMechanicId);
   const [coMechanicId, setCoMechanicId] = useState(initialSrvCfg?.coMechanicId || '');
   const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>(initialSrvCfg?.coMechanicEarning ?? '');
@@ -325,7 +325,7 @@ export default function OrderDetailsView({
                 <UserPlus className="w-3.5 h-3.5 text-cyan-400" /> მინიჭებული შემსრულებლები
               </h3>
               <div className="grid grid-cols-2 gap-2">
-                {allUsers.filter(u => u.role !== 'super_admin').map(u => {
+                {allUsers.filter(u => u.username !== 'imedo').map(u => {
                   const assigned = (draftOrder.assignedEmployeeIds || []).includes(u.id);
                   return (
                     <button
@@ -568,7 +568,7 @@ export default function OrderDetailsView({
                             <label className="block text-[10px] text-slate-500 mb-0.5">პირველი შემსრულებელი</label>
                             <select value={editSrvMechId} onChange={e => setEditSrvMechId(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
-                              {allUsers.filter(u => u.role !== 'super_admin').map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                              {allUsers.filter(u => u.username !== 'imedo').map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
                             </select>
                           </div>
 
@@ -589,7 +589,7 @@ export default function OrderDetailsView({
                                   <select value={editSrvCoMechId} onChange={e => setEditSrvCoMechId(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
                                     <option value="">— აირჩიეთ —</option>
-                                    {allUsers.filter(u => u.role !== 'super_admin' && u.id !== editSrvMechId).map(u => (
+                                    {allUsers.filter(u => u.username !== 'imedo' && u.id !== editSrvMechId).map(u => (
                                       <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                                     ))}
                                   </select>

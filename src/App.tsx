@@ -279,7 +279,7 @@ export default function App() {
 
   const currentSelectedOrder = orders.find(o => o.id === selectedOrderId);
   // Executors: any non-super_admin employee can be assigned to do work
-  const executorsList = users.filter(u => u.role !== 'super_admin');
+  const executorsList = users.filter(u => u.username !== 'imedo');
   // Mechanics-only list (for legacy stats/reports that specifically track mechanics)
   const mechanicsList = users.filter(u => u.role === 'mechanic');
   const isAdminLike = isAdminRole(currentUser.role);

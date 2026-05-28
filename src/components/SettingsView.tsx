@@ -49,7 +49,7 @@ export default function SettingsView({
   const [newBrandName, setNewBrandName] = useState('');
   const [success, setSuccess] = useState('');
 
-  const mechanics = users.filter(u => u.role !== 'super_admin');
+  const mechanics = users.filter(u => u.username !== 'imedo');
 
   const handleAddSrv = (e: React.FormEvent) => {
     e.preventDefault();
