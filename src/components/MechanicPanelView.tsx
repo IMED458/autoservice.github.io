@@ -104,7 +104,7 @@ function OwnerProfitView({
   const filteredStats = computeStats(filteredServices);
 
   // Per-employee wages (all time)
-  const nonOwnerUsers = allUsers.filter(u => !ownerIds.has(u.id) && u.username !== 'imedo');
+  const nonOwnerUsers = allUsers.filter(u => !ownerIds.has(u.id) && u.role !== 'developer');
   const employeeWages = nonOwnerUsers.map(u => {
     const wages = services.reduce((sum, s) => {
       if (s.mechanicId === u.id) return sum + s.mechanicEarning;

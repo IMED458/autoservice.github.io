@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic';
+export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer';
 
 export interface User {
   id: string;
@@ -166,6 +166,7 @@ export const ROLE_LABELS: Record<Role, string> = {
   admin: 'ადმინისტრატორი',
   manager: 'მენეჯერი',
   mechanic: 'ხელოსანი',
+  developer: 'პროგ. ადმინი',
 };
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
@@ -219,12 +220,12 @@ export function calculateMechanicEarning(
 }
 
 export function hasModule(user: User, mod: string): boolean {
-  return user.role === 'super_admin' || (user.enabledModules ?? []).includes(mod);
+  return user.role === 'super_admin' || user.role === 'developer' || (user.enabledModules ?? []).includes(mod);
 }
 
 /** Returns true for roles that have dashboard/admin-like access */
 export function isAdminRole(role: Role): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'manager';
+  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer';
 }
 
 /** Returns true for roles that have OWNER-level full access (super_admin and manager are equivalent) */

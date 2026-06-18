@@ -90,11 +90,13 @@ export default function App() {
               passwordHash: INITIAL_USERS[0].passwordHash,
             });
           }
-          // Ensure developer account (imedo) exists
+          // Ensure developer account (imedo) exists with correct role
           const devUser = INITIAL_USERS.find(u => u.username === 'imedo')!;
-          const devExists = usersSnap.docs.some(d => d.data().username === 'imedo');
-          if (!devExists) {
+          const devDoc = usersSnap.docs.find(d => d.data().username === 'imedo');
+          if (!devDoc) {
             await setDoc(doc(db, 'users', devUser.id), devUser);
+          } else if (devDoc.data().role !== 'developer') {
+            await updateDoc(doc(db, 'users', devDoc.id), { role: 'developer' });
           }
         }
       } catch (e) {
