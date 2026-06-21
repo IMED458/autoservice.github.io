@@ -15,19 +15,21 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
   if (!currentUser) return null;
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 py-3 px-4 shadow-md backdrop-blur-md">
+    <header className="sticky top-0 z-40 bg-slate-900 border-b border-slate-800 text-slate-100 py-2 px-4 shadow-md backdrop-blur-md">
       <div className="flex items-center justify-between max-w-lg mx-auto md:max-w-7xl">
         {/* Brand Logo and Title */}
-        <div className="flex items-center gap-2">
-          <div className="bg-amber-500 text-slate-950 p-2 rounded-xl flex items-center justify-center">
-            <Wrench className="w-5 h-5 stroke-[2.5]" />
-          </div>
-          <div>
-            <h1 className="text-base font-bold tracking-tight font-sans leading-none text-slate-50">
-              ავტოსერვისი
+        <div className="flex items-center gap-2.5">
+          <img
+            src="/autoservice.github.io/logo.png"
+            alt="New Auto Motors"
+            className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
+          />
+          <div className="leading-none">
+            <h1 className="text-sm font-black tracking-tight font-sans text-white leading-tight">
+              AutoGO
             </h1>
-            <span className="text-[10px] text-slate-400 font-sans tracking-wide">
-              მართვის სისტემა
+            <span className="text-[10px] text-red-400 font-bold font-sans tracking-wide uppercase">
+              New Auto Motors
             </span>
           </div>
         </div>
@@ -39,6 +41,8 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
               <Crown className="w-3.5 h-3.5 text-purple-400" />
             ) : currentUser.role === 'admin' ? (
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            ) : currentUser.role === 'developer' ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
             ) : (
               <Wrench className="w-3.5 h-3.5 text-cyan-400" />
             )}
