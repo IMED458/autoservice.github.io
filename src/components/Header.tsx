@@ -25,10 +25,10 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
             className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
           />
           <div className="leading-none">
-            <h1 className="text-sm font-black tracking-tight font-sans text-white leading-tight">
+            <h1 className="text-xl font-black tracking-tight font-sans leading-none bg-gradient-to-r from-amber-400 via-orange-400 to-red-500 bg-clip-text text-transparent drop-shadow-sm">
               AutoGO
             </h1>
-            <span className="text-[10px] text-red-400 font-bold font-sans tracking-wide uppercase">
+            <span className="text-[10px] text-slate-400 font-semibold font-sans tracking-widest uppercase">
               New Auto Motors
             </span>
           </div>
