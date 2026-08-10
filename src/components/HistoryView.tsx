@@ -5,6 +5,8 @@ import {
 } from '../types';
 import { Search, Filter, Phone, User as UserIcon, HelpCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
+import { formatDateDDMMYYYY } from '../utils/date';
+import DateField from './DateField';
 
 function formatPlate(raw: string): string {
   const clean = raw.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 7);
@@ -105,11 +107,10 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
           </div>
           <div>
             <label className="block text-[10px] text-slate-500 font-bold uppercase mb-0.5">თარიღი</label>
-            <input
+            <DateField
               id="filter-date-picker"
-              type="date"
               value={filterDate}
-              onChange={e => setFilterDate(e.target.value)}
+              onChange={setFilterDate}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/60"
             />
           </div>
@@ -209,7 +210,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
               >
                 <div className="flex items-start justify-between mb-2 pb-2 border-b border-slate-800/60 font-sans">
                   <div>
-                    <span className="text-[10px] text-slate-500 font-mono block leading-none mb-1">{order.date}</span>
+                    <span className="text-[10px] text-slate-500 font-mono block leading-none mb-1">{formatDateDDMMYYYY(order.date)}</span>
                     <h4 className="text-sm font-bold text-slate-200 uppercase tracking-tight">{order.carBrand}</h4>
                   </div>
                   <div className="bg-slate-950 border border-slate-850 px-2 py-1 rounded text-xs font-mono font-bold tracking-widest text-slate-200">

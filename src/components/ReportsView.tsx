@@ -25,6 +25,7 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
 
 interface ReportsViewProps {
   orders: CarServiceOrder[];
@@ -200,7 +201,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
       const totalEarn = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning + (s.coMechanicEarning || 0), 0);
 
       return [
-        order.date,
+        formatDateDDMMYYYY(order.date),
         `"${order.carBrand.replace(/"/g, '""')}"`,
         order.carNumber,
         `"${order.clientFullName.replace(/"/g, '""')}"`,
@@ -222,7 +223,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `ავტოსერვისი_პერიოდული_ანგარიში_${activePeriod}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `ავტოსერვისი_პერიოდული_ანგარიში_${activePeriod}_${formatDateDDMMYYYY(toISODateInputValue()).replace(/\//g, '.')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

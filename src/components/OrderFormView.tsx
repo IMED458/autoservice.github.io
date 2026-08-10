@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User, isAssignableMechanic } from '../types';
 import { Calendar, Car, User as UserIcon, Phone, Plus, FileText, CheckCircle, ChevronDown, Wrench, UserCheck } from 'lucide-react';
 import { motion } from 'motion/react';
+import { toISODateInputValue } from '../utils/date';
+import DateField from './DateField';
 
 interface OrderFormViewProps {
   carBrands: CarBrand[];
@@ -19,7 +21,7 @@ function formatPlate(raw: string): string {
 }
 
 export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, onAddOrder, onCancel }: OrderFormViewProps) {
-  const todayStr = new Date().toISOString().substring(0, 10);
+  const todayStr = toISODateInputValue();
 
   const [date, setDate] = useState(todayStr);
   const [selectedBrand, setSelectedBrand] = useState('');
@@ -109,7 +111,7 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
           <label className="block text-xs font-semibold text-slate-400 mb-1 flex items-center gap-1.5">
             <Calendar className="w-3.5 h-3.5 text-slate-500" /> მიღების თარიღი
           </label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+          <DateField value={date} onChange={setDate}
             className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-amber-500/60" />
         </div>
 

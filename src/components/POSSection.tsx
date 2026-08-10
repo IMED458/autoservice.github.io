@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, ProductSale, CarServiceOrder, PaymentStatus } from '../types';
 import { Search, ShoppingCart, Trash2, Plus, Minus, Percent, Coins, CreditCard, Landmark, Wallet, AlertCircle, Sparkles, Check } from 'lucide-react';
+import { toISODateInputValue } from '../utils/date';
 
 interface POSSectionProps {
   products: Product[];
@@ -137,7 +138,7 @@ export default function POSSection({ products, orders, onAddSale, currentUser }:
       clientPhone,
       carBrand,
       carNumber,
-      date: new Date().toISOString().split('T')[0],
+      date: toISODateInputValue(),
       totalAmount: cartSubtotal,
       discount: calculatedDiscount,
       finalAmount: cartTotal,

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProductSale } from '../types';
 import { Landmark, Phone, Car, CreditCard, Coins, Check, AlertCircle, Sparkles, ChevronRight, CheckCircle } from 'lucide-react';
+import { formatDateDDMMYYYY } from '../utils/date';
 
 interface DebtsSectionProps {
   productSales: ProductSale[];
@@ -114,7 +115,7 @@ export default function DebtsSection({ productSales, onMarkAsPaid, currentUser }
                           </div>
                         ))}
                       </div>
-                      <span className="text-[8.5px] text-slate-500 font-mono mt-1 block">თარიღი: {sale.date}</span>
+                      <span className="text-[8.5px] text-slate-500 font-mono mt-1 block">თარიღი: {formatDateDDMMYYYY(sale.date)}</span>
                     </td>
                     <td className="p-3 text-right font-black font-mono text-rose-400 text-[12px]">
                       {sale.finalAmount.toLocaleString()} ₾

@@ -7,6 +7,8 @@ import React, { useState } from 'react';
 import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike, isAssignableMechanic } from '../types';
 import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users } from 'lucide-react';
 import { motion } from 'motion/react';
+import { formatDateDDMMYYYY } from '../utils/date';
+import DateField from './DateField';
 
 interface MechanicPanelViewProps {
   orders: CarServiceOrder[];
@@ -181,12 +183,12 @@ function OwnerProfitView({
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
             <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-დან</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            <DateField value={startDate} onChange={setStartDate}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 text-slate-200" />
           </div>
           <div>
             <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-მდე</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+            <DateField value={endDate} onChange={setEndDate}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 text-slate-200" />
           </div>
         </div>
@@ -368,12 +370,12 @@ function EmployeeEarningsView({
         <div className="grid grid-cols-2 gap-2 text-xs">
           <div>
             <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-დან (თარიღი)</label>
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+            <DateField value={startDate} onChange={setStartDate}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500 text-slate-200" />
           </div>
           <div>
             <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-მდე (თარიღი)</label>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)}
+            <DateField value={endDate} onChange={setEndDate}
               className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500 text-slate-200" />
           </div>
         </div>
@@ -415,7 +417,7 @@ function EmployeeEarningsView({
               >
                 <div className="flex justify-between items-start border-b border-slate-800/60 pb-2 mb-2">
                   <div>
-                    <span className="text-[10px] text-slate-500 block font-mono leading-none">{order.date}</span>
+                    <span className="text-[10px] text-slate-500 block font-mono leading-none">{formatDateDDMMYYYY(order.date)}</span>
                     <h4 className="text-sm font-black text-slate-200 uppercase tracking-tight">{order.carBrand}</h4>
                   </div>
                   <span className="bg-slate-950 px-2 py-0.5 rounded text-xs font-mono font-bold text-slate-300">{order.carNumber}</span>

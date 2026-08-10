@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Product, ProductSale, DailyClosing, InventoryMovement, Role, hasFullSystemAccess } from '../types';
 import { FileSpreadsheet, FileDown, TrendingUp, DollarSign, Calendar, BarChart3, Receipt, Tag, ArrowDownLeft, ArrowUpRight, ShieldAlert, Sparkles, Filter, Users } from 'lucide-react';
+import { formatDateDDMMYYYY, formatDateTimeDDMMYYYY } from '../utils/date';
 
 interface StoreAnalyticsProps {
   products: Product[];
@@ -347,7 +348,7 @@ export default function StoreAnalytics({
                 {filteredSales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-slate-955/40 text-[11.5px]">
                     <td className="p-2.5 font-mono text-slate-400">
-                      {sale.createdAt ? new Date(sale.createdAt).toLocaleString('ka-GE', { hour12: false }) : sale.date}
+                      {sale.createdAt ? formatDateTimeDDMMYYYY(sale.createdAt) : formatDateDDMMYYYY(sale.date)}
                     </td>
                     <td className="p-2.5">
                       <div className="font-semibold text-slate-200">{sale.clientName}</div>
@@ -410,7 +411,7 @@ export default function StoreAnalytics({
                   return (
                     <tr key={move.id} className="hover:bg-slate-955/40 text-[11.5px]">
                       <td className="p-2.5 font-mono text-slate-400">
-                        {move.createdAt ? new Date(move.createdAt).toLocaleString('ka-GE', { hour12: false }) : move.date}
+                        {move.createdAt ? formatDateTimeDDMMYYYY(move.createdAt) : formatDateDDMMYYYY(move.date)}
                       </td>
                       <td className="p-2.5 font-semibold text-slate-200">{move.productName}</td>
                       <td className="p-2.5 text-center">
@@ -463,7 +464,7 @@ export default function StoreAnalytics({
                     <td className="p-2.5 font-bold text-slate-200">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>{c.date}</span>
+                        <span>{formatDateDDMMYYYY(c.date)}</span>
                         <span className="text-[10px] text-slate-500 font-mono font-normal">({c.startTime}-{c.closingTime})</span>
                       </div>
                     </td>
@@ -527,7 +528,7 @@ export default function StoreAnalytics({
                   {auditLogs.slice().reverse().map((log) => (
                     <tr key={log.id} className="hover:bg-slate-955/40">
                       <td className="p-2.5 font-mono text-slate-400">
-                        {log.createdAt ? new Date(log.createdAt).toLocaleString('ka-GE', { hour12: false }) : ''}
+                        {log.createdAt ? formatDateTimeDDMMYYYY(log.createdAt) : ''}
                       </td>
                       <td className="p-2.5 font-bold text-slate-300">{log.userFullName}</td>
                       <td className="p-2.5 font-sans font-semibold text-amber-500">{log.action}</td>

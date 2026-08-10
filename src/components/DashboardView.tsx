@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isAssignableMechanic } from '../types';
+import { formatDateDDMMYYYY } from '../utils/date';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -70,7 +71,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
         </div>
         <div className="flex items-center gap-1.5">
           <Calendar className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-          <span>{order.date}</span>
+          <span>{formatDateDDMMYYYY(order.date)}</span>
         </div>
       </div>
 

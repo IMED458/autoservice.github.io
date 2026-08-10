@@ -8,6 +8,7 @@ import DebtsSection from './DebtsSection';
 import StoreAnalytics from './StoreAnalytics';
 import { ShoppingCart, Package, ShieldCheck, Landmark, BarChart3, AppWindow } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
 
 interface StoreViewProps {
   currentUser: User | null;
@@ -158,7 +159,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
           type: 'sale',
           quantity: -item.quantity, // negative representing deduction
           purchasePrice: item.purchasePrice,
-          date: new Date().toISOString().split('T')[0],
+          date: toISODateInputValue(),
           note: `გაყიდვა POS ჩეკით #${newId}`,
           operatorName: operatorFullName,
           createdAt: new Date().toISOString()
@@ -231,7 +232,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
           type: 'refill' as const,
           quantity: refillQty,
           purchasePrice: refillPrice,
-          date: new Date().toISOString().split('T')[0],
+          date: toISODateInputValue(),
           note: refillNote,
           operatorName: operatorFullName,
           createdAt: new Date().toISOString()
@@ -258,7 +259,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
     };
 
     updateClosingsState([newClosing, ...dailyClosings]);
-    addAuditLog('დღის დახურვა', `სამუშაო დღე ${closingPayload.date} წარმატებით დაიხურა და დაიბლოკა`);
+    addAuditLog('დღის დახურვა', `სამუშაო დღე ${formatDateDDMMYYYY(closingPayload.date)} წარმატებით დაიხურა და დაიბლოკა`);
   };
 
   // 7. UNDO DAILY CLOSING (full system controllers only)
@@ -269,7 +270,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
     const nextClosings = dailyClosings.filter((c) => c.id !== closingId);
 
     updateClosingsState(nextClosings);
-    addAuditLog('დახურვის გაუქმება', `სამუშაო დღის ${target?.date || closingId} დახურვა გაუქმდა სუპერ ადმინის მიერ`);
+    addAuditLog('დახურვის გაუქმება', `სამუშაო დღის ${target?.date ? formatDateDDMMYYYY(target.date) : closingId} დახურვა გაუქმდა სუპერ ადმინის მიერ`);
   };
 
   // 8. MARK UNPAID AS PAID LATER (DEBTS COLLECTION)
@@ -280,7 +281,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
           ...sale,
           paymentStatus: 'paid' as const,
           paymentMethod: method,
-          date: new Date().toISOString().split('T')[0] // updates the transaction date to the day it was actually paid, reflecting in today's closing!
+          date: toISODateInputValue() // updates the transaction date to the day it was actually paid, reflecting in today's closing!
         };
       }
       return sale;

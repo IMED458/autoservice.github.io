@@ -7,6 +7,7 @@ import {
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { formatDateDDMMYYYY } from '../utils/date';
 
 interface OrderDetailsViewProps {
   order: CarServiceOrder;
@@ -228,7 +229,7 @@ export default function OrderDetailsView({
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-500 block uppercase font-bold mb-0.5">თარიღი</span>
-                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-500" /> {draftOrder.date}</span>
+                    <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-slate-500" /> {formatDateDDMMYYYY(draftOrder.date)}</span>
                   </div>
                 </div>
 

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ProductSale, CarServiceOrder, DailyClosing, Role, ServiceItem, hasFullSystemAccess } from '../types';
 import { Lock, FileSpreadsheet, FileText, Calendar, Clock, AlertCircle, CheckCircle2, DollarSign, BarChart3, TrendingUp, Printer, Check, ShoppingBag, Wrench, ShieldAlert } from 'lucide-react';
+import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
 
 interface DayClosingSectionProps {
   orders: CarServiceOrder[];
@@ -22,7 +23,7 @@ export default function DayClosingSection({
   const [closingNote, setClosingNote] = useState('დღიური ფინანსური ნაშთი ემთხვევა სალაროს. ხარვეზები არ დაფიქსირებულა.');
   const [lastClosedReport, setLastClosedReport] = useState<DailyClosing | null>(null);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = toISODateInputValue();
 
   const isSuper = hasFullSystemAccess(currentUser);
 
@@ -301,7 +302,7 @@ export default function DayClosingSection({
         <div className="bg-slate-900 border border-emerald-500/20 p-4 rounded-xl space-y-4">
           <div className="flex items-center gap-2 pb-2.5 border-b border-slate-850 text-emerald-400">
             <Lock className="w-4 h-4 text-emerald-400" />
-            <span className="text-xs font-black uppercase">გატარებული დახურვის ანგარიში ({todayStr})</span>
+            <span className="text-xs font-black uppercase">გატარებული დახურვის ანგარიში ({formatDateDDMMYYYY(todayStr)})</span>
           </div>
 
           <div className="space-y-2 text-slate-350">
@@ -384,7 +385,7 @@ export default function DayClosingSection({
             <div className="text-center space-y-1">
               <Printer className="w-7 h-7 text-indigo-500 mx-auto" />
               <h3 className="text-sm font-black led-none uppercase tracking-widest font-mono">დღიური ფინანსური დახურვა</h3>
-              <p className="text-[10px] text-slate-500 font-mono">თარიღი: {lastClosedReport.date}</p>
+              <p className="text-[10px] text-slate-500 font-mono">თარიღი: {formatDateDDMMYYYY(lastClosedReport.date)}</p>
               <p className="text-[9px] text-slate-400 font-mono">საათები: {lastClosedReport.startTime} - {lastClosedReport.closingTime}</p>
               <p className="text-[9px] text-slate-400 font-mono">მოლარე: {lastClosedReport.closedBy}</p>
             </div>
