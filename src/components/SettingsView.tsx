@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ServiceTypeConfig, CarBrand, User, DEFAULT_CAR_BRANDS } from '../types';
+import { ServiceTypeConfig, CarBrand, User, DEFAULT_CAR_BRANDS, isAssignableMechanic } from '../types';
 import { Plus, Edit, Trash, Save, X, Settings, Car, Wrench, UserPlus, Check } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -49,7 +49,7 @@ export default function SettingsView({
   const [newBrandName, setNewBrandName] = useState('');
   const [success, setSuccess] = useState('');
 
-  const mechanics = users.filter(u => u.username !== 'imedo');
+  const mechanics = users.filter(isAssignableMechanic);
 
   const handleAddSrv = (e: React.FormEvent) => {
     e.preventDefault();

@@ -28,7 +28,6 @@ export default function ShopView({
   onRefillStock, onAddSale, onConfirmCloseDay,
 }: ShopViewProps) {
   const [tab, setTab] = useState<ShopTab>('pos');
-  const isPrivileged = ['super_admin', 'admin', 'manager'].includes(currentUser.role);
 
   return (
     <div className="pb-20">

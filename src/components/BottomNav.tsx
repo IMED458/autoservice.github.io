@@ -1,4 +1,4 @@
-import { User, hasModule, isAdminRole, isOwnerLike } from '../types';
+import { User, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic } from '../types';
 import { LayoutDashboard, History, Users, BarChart3, Wrench, ListTodo, ShoppingBag, Settings, CalendarCheck, TrendingUp } from 'lucide-react';
 
 interface BottomNavProps {
@@ -20,7 +20,7 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
     if (hasModule(currentUser, 'reports')) tabs.push({ id: 'reports', label: 'ანგარიში', icon: BarChart3 });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
-    tabs.push({ id: 'earnings', label: 'ჩემი', icon: TrendingUp });
+    if (isAssignableMechanic(currentUser)) tabs.push({ id: 'earnings', label: 'ჩემი', icon: TrendingUp });
     if (isOwnerLike(role) || role === 'admin') {
       tabs.push({ id: 'settings', label: 'პარამეტრი', icon: Settings });
     }

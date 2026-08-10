@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ProductSale, CarServiceOrder, DailyClosing, Role, ServiceItem } from '../types';
+import { ProductSale, CarServiceOrder, DailyClosing, Role, ServiceItem, hasFullSystemAccess } from '../types';
 import { Lock, FileSpreadsheet, FileText, Calendar, Clock, AlertCircle, CheckCircle2, DollarSign, BarChart3, TrendingUp, Printer, Check, ShoppingBag, Wrench, ShieldAlert } from 'lucide-react';
 
 interface DayClosingSectionProps {
@@ -24,7 +24,7 @@ export default function DayClosingSection({
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  const isSuper = currentUser.role === 'super_admin';
+  const isSuper = hasFullSystemAccess(currentUser);
 
   // 1. Calculate Today's Services Revenue (from completed orders TODAY and their respective service items)
   const todayOrders = orders.filter((o) => o.date === todayStr);

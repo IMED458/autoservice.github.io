@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Product, Role } from '../types';
+import { Product, Role, hasAdminAccess, hasFullSystemAccess } from '../types';
 import { Plus, Edit3, Trash2, ArrowUpRight, TrendingUp, Sparkles, Image, RefreshCw, AlertTriangle, Eye, X, Check, Search, Filter } from 'lucide-react';
 
 interface ProductsSectionProps {
@@ -58,8 +58,8 @@ export default function ProductsSection({
 
   // Perms check: ONLY Super Admin can do absolute overrides, edit closed states, delete catalog items
   // Manager can add, edit, or fill. Cashier has POS only. Let's trace role
-  const isPrivileged = ['super_admin', 'admin', 'manager'].includes(currentUser.role);
-  const isSuper = currentUser.role === 'super_admin';
+  const isPrivileged = hasAdminAccess(currentUser);
+  const isSuper = hasFullSystemAccess(currentUser);
 
   // Categories list
   const categories = ['ყველა', ...Array.from(new Set(products.map((p) => p.category)))];

@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer';
+export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer' | 'accountant';
 
 export interface User {
   id: string;
@@ -162,12 +162,24 @@ export interface CarBrand {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
-  super_admin: 'მფლობელი',
+  super_admin: 'სუპერ ადმინი',
   admin: 'ადმინისტრატორი',
   manager: 'მენეჯერი',
   mechanic: 'ხელოსანი',
   developer: 'პროგ. ადმინი',
+  accountant: 'ბუღალტერი',
 };
+
+export const NON_WORKER_USERNAMES = ['imedo'];
+
+export function isAssignableMechanic(user: Pick<User, 'role' | 'username'>): boolean {
+  return user.role !== 'accountant' && !NON_WORKER_USERNAMES.includes(user.username.toLowerCase());
+}
+
+export function getUserRoleLabel(user: Pick<User, 'role' | 'username' | 'firstName'>): string {
+  if (user.username.toLowerCase() === 'zviadi' || user.firstName === 'ზვიადი') return 'მფლობელი';
+  return ROLE_LABELS[user.role];
+}
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   new: 'ახალი',
@@ -220,12 +232,20 @@ export function calculateMechanicEarning(
 }
 
 export function hasModule(user: User, mod: string): boolean {
-  return user.role === 'super_admin' || user.role === 'developer' || (user.enabledModules ?? []).includes(mod);
+  return user.role === 'super_admin' || user.role === 'developer' || user.role === 'manager' || (user.enabledModules ?? []).includes(mod);
+}
+
+export function hasAdminAccess(user: Pick<User, 'role'>): boolean {
+  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'manager' || user.role === 'developer';
+}
+
+export function hasFullSystemAccess(user: Pick<User, 'role'>): boolean {
+  return isOwnerLike(user.role) || user.role === 'developer';
 }
 
 /** Returns true for roles that have dashboard/admin-like access */
 export function isAdminRole(role: Role): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer';
+  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer' || role === 'accountant';
 }
 
 /** Returns true for roles that have OWNER-level full access (super_admin and manager are equivalent) */

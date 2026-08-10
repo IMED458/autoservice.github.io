@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { db } from './firebase';
 import {
   collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc,
-  writeBatch, getDocs,
+  writeBatch, getDocs, deleteField,
 } from 'firebase/firestore';
 
 import Header from './components/Header';
@@ -40,6 +40,39 @@ function stripUndefined(obj: any): any {
   return obj;
 }
 
+function normalizePaidToName(paidTo?: string): string | undefined {
+  const name = paidTo?.trim();
+  if (!name) return undefined;
+  if (['imedo', 'იმედო', 'გიორგი იმედაშვილი'].includes(name.toLowerCase())) return 'ზვიადი';
+  if (name === 'გიორგი') return 'გიორგი მენეჯერი';
+  return name;
+}
+
+function sanitizeServiceConfig(config: ServiceTypeConfig, allUsers: User[]): ServiceTypeConfig {
+  const assignableWorkerIds = new Set(allUsers.filter(isAssignableMechanic).map(u => u.id));
+  const employeeRewards = config.employeeRewards
+    ? Object.fromEntries(
+        Object.entries(config.employeeRewards)
+          .filter(([employeeId]) => assignableWorkerIds.has(employeeId))
+          .map(([employeeId, reward]) => {
+            if (!reward.coMechanicId || assignableWorkerIds.has(reward.coMechanicId)) {
+              return [employeeId, reward];
+            }
+            const { coMechanicId: _coId, coMechanicRewardType: _coType, coMechanicEarning: _coEarn, ...safeReward } = reward;
+            return [employeeId, safeReward];
+          })
+      )
+    : undefined;
+  const configHasSafeCoMechanic = !config.coMechanicId || assignableWorkerIds.has(config.coMechanicId);
+  return stripUndefined({
+    ...config,
+    employeeRewards: employeeRewards && Object.keys(employeeRewards).length > 0 ? employeeRewards : undefined,
+    coMechanicId: configHasSafeCoMechanic ? config.coMechanicId : undefined,
+    coMechanicRewardType: configHasSafeCoMechanic ? config.coMechanicRewardType : undefined,
+    coMechanicEarning: configHasSafeCoMechanic ? config.coMechanicEarning : undefined,
+  });
+}
+
 export default function App() {
   const [users, setUsers] = useState<User[]>([]);
   const [orders, setOrders] = useState<CarServiceOrder[]>([]);
@@ -69,14 +102,13 @@ export default function App() {
     const init = async () => {
       try {
         const usersSnap = await getDocs(collection(db, 'users'));
+        const batch = writeBatch(db);
         if (usersSnap.empty) {
-          const batch = writeBatch(db);
           INITIAL_USERS.forEach(u => batch.set(doc(db, 'users', u.id), u));
           INITIAL_ORDERS.forEach(o => batch.set(doc(db, 'orders', o.id), o));
           INITIAL_SERVICES.forEach(s => batch.set(doc(db, 'services', s.id), s));
           DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
-          await batch.commit();
         } else {
           // Ensure owner (super_admin) account exists and credentials are up-to-date
           const ownerDoc = usersSnap.docs.find(d => d.data().role === 'super_admin' || d.data().username === 'zviad' || d.data().username === 'zviadi');
@@ -90,15 +122,66 @@ export default function App() {
               passwordHash: INITIAL_USERS[0].passwordHash,
             });
           }
-          // Ensure developer account (imedo) exists with correct role
+          // Ensure technical super admin account (imedo) exists with correct role.
           const devUser = INITIAL_USERS.find(u => u.username === 'imedo')!;
           const devDoc = usersSnap.docs.find(d => d.data().username === 'imedo');
           if (!devDoc) {
             await setDoc(doc(db, 'users', devUser.id), devUser);
-          } else if (devDoc.data().role !== 'developer') {
-            await updateDoc(doc(db, 'users', devDoc.id), { role: 'developer' });
+          } else if (devDoc.data().role !== 'super_admin') {
+            await updateDoc(doc(db, 'users', devDoc.id), { role: 'super_admin' });
           }
+
+          const nonWorkerIds = new Set<string>();
+          usersSnap.docs.forEach(userDoc => {
+            const u = userDoc.data() as User;
+            if (u.role === 'accountant' || u.username?.toLowerCase() === 'imedo') nonWorkerIds.add(userDoc.id);
+          });
+          nonWorkerIds.add(devDoc?.id || devUser.id);
+
+          const ordersSnap = await getDocs(collection(db, 'orders'));
+          ordersSnap.docs.forEach(orderDoc => {
+            const orderData = orderDoc.data() as CarServiceOrder;
+            const normalizedPaidTo = normalizePaidToName(orderData.paidTo);
+            const updates: Record<string, unknown> = {};
+            if (orderData.paidTo && orderData.paidTo !== normalizedPaidTo) {
+              updates.paidTo = normalizedPaidTo || 'ზვიადი';
+            }
+            const safeAssignedEmployeeIds = (orderData.assignedEmployeeIds || []).filter(id => !nonWorkerIds.has(id));
+            if ((orderData.assignedEmployeeIds || []).length !== safeAssignedEmployeeIds.length) {
+              updates.assignedEmployeeIds = safeAssignedEmployeeIds.length > 0 ? safeAssignedEmployeeIds : deleteField();
+            }
+            if (Object.keys(updates).length > 0) {
+              batch.update(doc(db, 'orders', orderDoc.id), updates);
+            }
+          });
+
+          const servicesSnap = await getDocs(collection(db, 'services'));
+          servicesSnap.docs.forEach(serviceDoc => {
+            const serviceData = serviceDoc.data() as ServiceItem;
+            const updates: Record<string, unknown> = {};
+            if (nonWorkerIds.has(serviceData.mechanicId)) {
+              updates.mechanicId = 'usr-mech-1';
+            }
+            if (serviceData.coMechanicId && nonWorkerIds.has(serviceData.coMechanicId)) {
+              updates.coMechanicId = deleteField();
+              updates.coMechanicEarning = deleteField();
+            }
+            if (Object.keys(updates).length > 0) {
+              batch.update(doc(db, 'services', serviceDoc.id), updates);
+            }
+          });
+
+          const allUserData = usersSnap.docs.map(userDoc => ({ ...(userDoc.data() as User), id: userDoc.id }));
+          const configsSnap = await getDocs(collection(db, 'serviceConfigs'));
+          configsSnap.docs.forEach(configDoc => {
+            const configData = configDoc.data() as ServiceTypeConfig;
+            const safeConfig = sanitizeServiceConfig(configData, allUserData);
+            if (JSON.stringify(stripUndefined(configData)) !== JSON.stringify(safeConfig)) {
+              batch.set(doc(db, 'serviceConfigs', configDoc.id), safeConfig);
+            }
+          });
         }
+        await batch.commit();
       } catch (e) {
         console.error('Firestore init error:', e);
       } finally {
@@ -162,7 +245,16 @@ export default function App() {
   const handleAddOrder = async (fields: Omit<CarServiceOrder, 'id' | 'createdAt' | 'updatedAt' | 'createdBy'>) => {
     const id = `ord-${Date.now()}`;
     const ts = new Date().toISOString();
-    const o: CarServiceOrder = { ...fields, id, createdBy: currentUser?.id || 'unknown', createdAt: ts, updatedAt: ts };
+    const assignableWorkerIds = new Set(users.filter(isAssignableMechanic).map(u => u.id));
+    const safeAssignedEmployeeIds = (fields.assignedEmployeeIds || []).filter(id => assignableWorkerIds.has(id));
+    const o: CarServiceOrder = {
+      ...fields,
+      assignedEmployeeIds: safeAssignedEmployeeIds.length > 0 ? safeAssignedEmployeeIds : undefined,
+      id,
+      createdBy: currentUser?.id || 'unknown',
+      createdAt: ts,
+      updatedAt: ts,
+    };
     await setDoc(doc(db, 'orders', id), stripUndefined(o));
     setActiveView('regular-tab');
     setCurrentTab('dashboard');
@@ -174,10 +266,21 @@ export default function App() {
     updatedServices: ServiceItem[]
   ) => {
     const batch = writeBatch(db);
-    batch.set(doc(db, 'orders', orderId), stripUndefined({ ...updatedOrder, updatedAt: new Date().toISOString() }));
+    const assignableWorkerIds = users.filter(isAssignableMechanic).map(u => u.id);
+    const sanitizedServices = updatedServices.filter(s =>
+      assignableWorkerIds.includes(s.mechanicId) &&
+      (!s.coMechanicId || assignableWorkerIds.includes(s.coMechanicId))
+    );
+    const safeOrder: CarServiceOrder = {
+      ...updatedOrder,
+      assignedEmployeeIds: (updatedOrder.assignedEmployeeIds || []).filter(id => assignableWorkerIds.includes(id)),
+      paidTo: updatedOrder.paymentStatus === 'paid' ? normalizePaidToName(updatedOrder.paidTo) || 'ზვიადი' : undefined,
+    };
+
+    batch.set(doc(db, 'orders', orderId), stripUndefined({ ...safeOrder, updatedAt: new Date().toISOString() }));
     const oldSrvs = services.filter(s => s.orderId === orderId);
     oldSrvs.forEach(s => batch.delete(doc(db, 'services', s.id)));
-    updatedServices.forEach(s => batch.set(doc(db, 'services', s.id), stripUndefined(s)));
+    sanitizedServices.forEach(s => batch.set(doc(db, 'services', s.id), stripUndefined(s)));
     await batch.commit();
     setActiveView('regular-tab');
   };
@@ -198,7 +301,7 @@ export default function App() {
 
   const handleSaveServiceConfigs = async (configs: ServiceTypeConfig[]) => {
     const batch = writeBatch(db);
-    configs.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), stripUndefined(c)));
+    configs.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), sanitizeServiceConfig(c, users)));
     const toDelete = serviceConfigs.filter(sc => !configs.find(c => c.id === sc.id));
     toDelete.forEach(c => batch.delete(doc(db, 'serviceConfigs', c.id)));
     await batch.commit();
@@ -280,10 +383,7 @@ export default function App() {
   }
 
   const currentSelectedOrder = orders.find(o => o.id === selectedOrderId);
-  // Executors: any non-super_admin employee can be assigned to do work
-  const executorsList = users.filter(u => u.username !== 'imedo');
-  // Mechanics-only list (for legacy stats/reports that specifically track mechanics)
-  const mechanicsList = users.filter(u => u.role === 'mechanic');
+  const executorsList = users.filter(isAssignableMechanic);
   const isAdminLike = isAdminRole(currentUser.role);
   const serviceTypeNames = serviceConfigs.map(c => ({ id: c.id, name: c.name }));
 

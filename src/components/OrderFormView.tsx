@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User } from '../types';
+import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User, isAssignableMechanic } from '../types';
 import { Calendar, Car, User as UserIcon, Phone, Plus, FileText, CheckCircle, ChevronDown, Wrench, UserCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -38,8 +38,7 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
 
   const brandRef = useRef<HTMLDivElement>(null);
 
-  // Only non-super_admin users can be assigned tasks
-  const assignableUsers = allUsers.filter(u => u.role !== 'super_admin');
+  const assignableUsers = allUsers.filter(isAssignableMechanic);
 
   const filteredBrands = carBrands.filter(b =>
     b.name.toLowerCase().includes(brandSearch.toLowerCase())

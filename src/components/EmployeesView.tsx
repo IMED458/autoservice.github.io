@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Role, ROLE_LABELS, isOwnerLike } from '../types';
+import { User, Role, getUserRoleLabel, isOwnerLike } from '../types';
 import { hashPassword } from '../utils/crypto';
 import { UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -111,6 +111,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     if (r === 'super_admin') return <Crown className="w-4 h-4" />;
     if (r === 'admin') return <Shield className="w-4 h-4" />;
     if (r === 'manager') return <Crown className="w-4 h-4" />;
+    if (r === 'accountant') return <Shield className="w-4 h-4" />;
     return <Wrench className="w-4 h-4" />;
   };
 
@@ -118,14 +119,16 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     if (r === 'super_admin') return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
     if (r === 'admin') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
     if (r === 'manager') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400';
+    if (r === 'accountant') return 'bg-sky-500/10 border-sky-500/20 text-sky-400';
     return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400';
   };
 
   // All available roles — owner/manager can assign any role; admin can only assign mechanic/manager
   const allRoleOptions: { value: Role; label: string }[] = [
-    { value: 'super_admin', label: 'მფლობელი' },
+    { value: 'super_admin', label: 'სუპერ ადმინი' },
     { value: 'manager', label: 'მენეჯერი' },
     { value: 'admin', label: 'ადმინი' },
+    { value: 'accountant', label: 'ბუღალტერი' },
     { value: 'mechanic', label: 'ხელოსანი' },
   ];
 
@@ -146,7 +149,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   const canDelete = (u: User) => {
     if (u.id === currentUser.id) return false;
     // Protect the developer account from deletion
-    if (u.username === 'imedo') return false;
+    if (u.username.toLowerCase() === 'imedo') return false;
     if (isOwner) return true;
     if (isAdmin && u.role === 'mechanic') return true;
     return false;
@@ -155,7 +158,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   // Can we change this user's role in the edit modal?
   const canEditRole = (u: User) => {
     if (u.id === currentUser.id) return false;  // can't change own role
-    if (u.username === 'imedo') return false;    // protect dev account role
+    if (u.username.toLowerCase() === 'imedo') return false;    // protect dev account role
     return isOwner || isAdmin;
   };
 
@@ -239,7 +242,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
       <div className="space-y-2.5">
         {users.map(user => {
           const isOwn = user.id === currentUser.id;
-          const isDev = user.username === 'imedo';
+          const isDev = user.username.toLowerCase() === 'imedo';
           return (
             <div key={user.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-md">
               <div className="flex items-center gap-3 min-w-0">
@@ -255,7 +258,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
                   <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500 mt-0.5">
                     <span className="font-mono">@{user.username}</span>
                     <span>·</span>
-                    <span className="truncate">{ROLE_LABELS[user.role]}</span>
+                    <span className="truncate">{getUserRoleLabel(user)}</span>
                     {(user.enabledModules ?? []).length > 0 && (
                       <span className="text-[9px] text-amber-500/60">· {(user.enabledModules ?? []).length} მოდული</span>
                     )}

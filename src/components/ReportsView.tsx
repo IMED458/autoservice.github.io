@@ -136,11 +136,12 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
   // Aggregate all paidTo shares
   const paidToSharesRecords: Record<string, PaidToShare> = {};
 
-  // Initialize with admins or users to ensure 'ზვიადი' is visible
+  // Initialize with everyone who may receive operational money; imedo/accountant are excluded upstream.
   paidToSharesRecords['ზვიადი'] = { name: 'ზვიადი', totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
   allUsers.forEach((u) => {
-    if (u.firstName !== 'ზვიადი') {
-      paidToSharesRecords[u.firstName] = { name: u.firstName, totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
+    if (u.username.toLowerCase() !== 'imedo' && u.role !== 'accountant' && u.firstName !== 'ზვიადი') {
+      const displayName = `${u.firstName} ${u.lastName}`.trim();
+      paidToSharesRecords[displayName] = { name: displayName, totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
     }
   });
 
@@ -200,7 +201,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     const rows = periodOrders.map((order) => {
       const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
       const totalCost = orderSrvList.reduce((sum, s) => sum + s.price, 0);
-      const totalEarn = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning, 0);
+      const totalEarn = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning + (s.coMechanicEarning || 0), 0);
 
       return [
         order.date,

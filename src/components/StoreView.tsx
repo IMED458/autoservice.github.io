@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Product, ProductSale, InventoryMovement, DailyClosing, AuditLog, Role, User, CarServiceOrder, ServiceItem } from '../types';
+import { Product, ProductSale, InventoryMovement, DailyClosing, AuditLog, Role, User, CarServiceOrder, ServiceItem, hasFullSystemAccess } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_PRODUCT_SALES, INITIAL_INVENTORY_MOVEMENTS, INITIAL_DAILY_CLOSINGS } from '../utils/initialStoreData';
 import POSSection from './POSSection';
 import ProductsSection from './ProductsSection';
@@ -71,7 +71,7 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
       const initialLogs: AuditLog[] = [
         {
           id: 'audit-1',
-          userId: 'usr-admin-1',
+          userId: 'usr-owner-zviad',
           userFullName: 'სისტემა',
           action: 'ინტეგრაცია',
           details: 'მაღაზიის/მარაგების ახალი მოდული წარმატებით აქტივირდა',
@@ -261,9 +261,9 @@ export default function StoreView({ currentUser, orders, services }: StoreViewPr
     addAuditLog('დღის დახურვა', `სამუშაო დღე ${closingPayload.date} წარმატებით დაიხურა და დაიბლოკა`);
   };
 
-  // 7. UNDO DAILY CLOSING (SUPER ADMIN ONLY)
+  // 7. UNDO DAILY CLOSING (full system controllers only)
   const handleUndoClosing = (closingId: string) => {
-    if (!currentUser || currentUser.role !== 'super_admin') return;
+    if (!currentUser || !hasFullSystemAccess(currentUser)) return;
 
     const target = dailyClosings.find((c) => c.id === closingId);
     const nextClosings = dailyClosings.filter((c) => c.id !== closingId);

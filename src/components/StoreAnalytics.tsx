@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Product, ProductSale, DailyClosing, InventoryMovement, Role } from '../types';
+import { Product, ProductSale, DailyClosing, InventoryMovement, Role, hasFullSystemAccess } from '../types';
 import { FileSpreadsheet, FileDown, TrendingUp, DollarSign, Calendar, BarChart3, Receipt, Tag, ArrowDownLeft, ArrowUpRight, ShieldAlert, Sparkles, Filter, Users } from 'lucide-react';
 
 interface StoreAnalyticsProps {
@@ -28,7 +28,7 @@ export default function StoreAnalytics({
   const [historyMethod, setHistoryMethod] = useState('all');
   const [historyPaid, setHistoryPaid] = useState('all');
 
-  const isSuper = currentUser.role === 'super_admin';
+  const isSuper = hasFullSystemAccess(currentUser);
 
   // --- STATISTICS CALCULATORS ---
   const paidSales = productSales.filter((s) => s.paymentStatus === 'paid');

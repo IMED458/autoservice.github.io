@@ -28,7 +28,7 @@ export const INITIAL_USERS: User[] = [
     lastName: 'იმედაშვილი',
     username: 'imedo',
     passwordHash: hashPassword('imed458'),
-    role: 'developer',
+    role: 'super_admin',
     enabledModules: ['shop', 'day_closing', 'reports'],
     createdAt: '2026-01-01T09:00:00Z',
   },

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS } from '../types';
+import React, { useState } from 'react';
+import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAssignableMechanic } from '../types';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -40,7 +40,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
 
   const assignees = (order.assignedEmployeeIds || [])
     .map(id => allUsers.find(u => u.id === id))
-    .filter(Boolean) as User[];
+    .filter((u): u is User => Boolean(u) && isAssignableMechanic(u));
 
   return (
     <motion.div
@@ -117,9 +117,10 @@ export default function DashboardView({
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all_active');
 
   // "My Tasks": orders explicitly assigned to current user that are not completed
-  const myTasksCount = orders.filter(o =>
+  const canHaveAssignedTasks = isAssignableMechanic(currentUser);
+  const myTasksCount = canHaveAssignedTasks ? orders.filter(o =>
     (o.assignedEmployeeIds || []).includes(currentUser.id) && o.status !== 'completed'
-  ).length;
+  ).length : 0;
 
   const filteredOrders = orders.filter((order) => {
     const q = searchQuery.toLowerCase().trim();
@@ -135,7 +136,7 @@ export default function DashboardView({
     if (!matchesSearch) return false;
 
     if (selectedStatusFilter === 'my-tasks')
-      return (order.assignedEmployeeIds || []).includes(currentUser.id) && order.status !== 'completed';
+      return canHaveAssignedTasks && (order.assignedEmployeeIds || []).includes(currentUser.id) && order.status !== 'completed';
     if (selectedStatusFilter === 'all_active') return order.status === 'new' || order.status === 'pending';
     if (selectedStatusFilter === 'unpaid') return order.paymentStatus === 'unpaid';
     if (selectedStatusFilter === 'all') return true;
@@ -248,13 +249,14 @@ export default function DashboardView({
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredOrders.map((order) => (
-            <OrderCard
-              key={order.id}
-              order={order}
-              allUsers={allUsers}
-              onSelectOrder={onSelectOrder}
-              highlight={selectedStatusFilter === 'my-tasks'}
-            />
+            <React.Fragment key={order.id}>
+              <OrderCard
+                order={order}
+                allUsers={allUsers}
+                onSelectOrder={onSelectOrder}
+                highlight={selectedStatusFilter === 'my-tasks'}
+              />
+            </React.Fragment>
           ))}
         </div>
       )}

@@ -3,6 +3,7 @@ import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, calculateMechanicEarning, ROLE_LABELS,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
+  isAssignableMechanic,
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,6 +25,7 @@ export default function OrderDetailsView({
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
   const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'manager';
+  const mechanicOptions = mechanics.filter(isAssignableMechanic);
 
   const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
   const [draftServices, setDraftServices] = useState<ServiceItem[]>(() =>
@@ -41,7 +43,7 @@ export default function OrderDetailsView({
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
   const initialSrvType = serviceConfigs[0]?.id || 'diagnostic';
   const initialSrvCfg = serviceConfigs.find(c => c.id === initialSrvType);
-  const initialMechId = currentUser.id || mechanics[0]?.id || '';
+  const initialMechId = isAssignableMechanic(currentUser) ? currentUser.id : mechanicOptions[0]?.id || '';
   const initialEmpCo = initialSrvCfg?.employeeRewards?.[initialMechId];
   const [serviceType, setServiceType] = useState<string>(initialSrvType);
   const [serviceDescription, setServiceDescription] = useState('');
@@ -92,8 +94,16 @@ export default function OrderDetailsView({
       alert('გთხოვთ მიუთითოთ ვალიდური ფასი და აღწერა');
       return;
     }
+    if (!mechanicOptions.some(m => m.id === editSrvMechId)) {
+      alert('გთხოვთ აირჩიოთ რეალური შემსრულებელი. ბუღალტერზე ან imedo-ზე სამუშაო ვერ მიებმება.');
+      return;
+    }
     const earn = calculateMechanicEarning(editSrvType, Number(editSrvPriceValue), serviceConfigs, editSrvMechId);
     const hasCoMech = showEditCoMechanic && editSrvCoMechId && editSrvCoMechId !== editSrvMechId;
+    if (hasCoMech && !mechanicOptions.some(m => m.id === editSrvCoMechId)) {
+      alert('მეორე შემსრულებელიც უნდა იყოს რეალური შემსრულებელი.');
+      return;
+    }
     setDraftServices(prev => prev.map(s => {
       if (s.id !== editingSrvId) return s;
       // Build without undefined — Firestore rejects undefined fields
@@ -116,10 +126,17 @@ export default function OrderDetailsView({
     setServiceError('');
     if (servicePrice === '' || Number(servicePrice) < 0) { setServiceError('ფასი სავალდებულოა'); return; }
     if (!serviceDescription.trim()) { setServiceError('სამუშაო აღწერა სავალდებულოა'); return; }
-    if (!selectedMechanicId) { setServiceError('გთხოვთ აირჩიოთ შემსრულებელი'); return; }
+    if (!selectedMechanicId || !mechanicOptions.some(m => m.id === selectedMechanicId)) {
+      setServiceError('გთხოვთ აირჩიოთ რეალური შემსრულებელი');
+      return;
+    }
 
     const earn = calculateMechanicEarning(serviceType, Number(servicePrice), serviceConfigs, selectedMechanicId);
     const hasCoMech = showCoMechanic && coMechanicId && coMechanicId !== selectedMechanicId;
+    if (hasCoMech && !mechanicOptions.some(m => m.id === coMechanicId)) {
+      setServiceError('მეორე შემსრულებელიც უნდა იყოს რეალური შემსრულებელი');
+      return;
+    }
     const newSrv: ServiceItem = {
       id: `srv-draft-${Date.now()}`,
       orderId: draftOrder.id,
@@ -153,7 +170,7 @@ export default function OrderDetailsView({
   };
 
   const paidToOptions = allUsers
-    .filter(u => u.username !== 'imedo')
+    .filter(u => u.role !== 'accountant' && u.username.toLowerCase() !== 'imedo')
     .map(u => ({ id: u.id, label: `${u.firstName}${u.lastName ? ' ' + u.lastName : ''}` }));
 
   return (
@@ -329,7 +346,7 @@ export default function OrderDetailsView({
                 <UserPlus className="w-3.5 h-3.5 text-cyan-400" /> მინიჭებული შემსრულებლები
               </h3>
               <div className="grid grid-cols-2 gap-2">
-                {allUsers.filter(u => u.username !== 'imedo').map(u => {
+                {mechanicOptions.map(u => {
                   const assigned = (draftOrder.assignedEmployeeIds || []).includes(u.id);
                   return (
                     <button
@@ -488,7 +505,7 @@ export default function OrderDetailsView({
                         }
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
-                      {mechanics.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
+                      {mechanicOptions.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                     </select>
                   </div>
 
@@ -509,7 +526,7 @@ export default function OrderDetailsView({
                           <select value={coMechanicId} onChange={e => setCoMechanicId(e.target.value)}
                             className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
                             <option value="">— აირჩიეთ —</option>
-                            {mechanics.filter(m => m.id !== selectedMechanicId).map(m => (
+                            {mechanicOptions.filter(m => m.id !== selectedMechanicId).map(m => (
                               <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
                             ))}
                           </select>
@@ -592,7 +609,7 @@ export default function OrderDetailsView({
                             <label className="block text-[10px] text-slate-500 mb-0.5">პირველი შემსრულებელი</label>
                             <select value={editSrvMechId} onChange={e => setEditSrvMechId(e.target.value)}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
-                              {allUsers.filter(u => u.username !== 'imedo').map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
+                              {mechanicOptions.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
                             </select>
                           </div>
 
@@ -613,7 +630,7 @@ export default function OrderDetailsView({
                                   <select value={editSrvCoMechId} onChange={e => setEditSrvCoMechId(e.target.value)}
                                     className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
                                     <option value="">— აირჩიეთ —</option>
-                                    {allUsers.filter(u => u.username !== 'imedo' && u.id !== editSrvMechId).map(u => (
+                                    {mechanicOptions.filter(u => u.id !== editSrvMechId).map(u => (
                                       <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
                                     ))}
                                   </select>

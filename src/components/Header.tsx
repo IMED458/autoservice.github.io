@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { User, ROLE_LABELS } from '../types';
+import { User, getUserRoleLabel } from '../types';
 import { LogOut, ShieldCheck, Wrench, Crown } from 'lucide-react';
 
 interface HeaderProps {
@@ -41,6 +41,8 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
               <Crown className="w-3.5 h-3.5 text-purple-400" />
             ) : currentUser.role === 'admin' ? (
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+            ) : currentUser.role === 'accountant' ? (
+              <ShieldCheck className="w-3.5 h-3.5 text-sky-400" />
             ) : currentUser.role === 'developer' ? (
               <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
             ) : (
@@ -51,7 +53,7 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
                 {currentUser.firstName} {currentUser.lastName ? currentUser.lastName[0] + '.' : ''}
               </div>
               <span className="text-[9px] text-slate-500 font-semibold font-sans uppercase tracking-wider">
-                {ROLE_LABELS[currentUser.role]}
+                {getUserRoleLabel(currentUser)}
               </span>
             </div>
           </div>
