@@ -471,7 +471,7 @@ export default function OrderDetailsView({
                     <span className="font-semibold block mb-0.5 text-slate-300">შემსრულებლის შემოსავალი:</span>
                     {(() => {
                       const conf = serviceConfigs.find(c => c.id === serviceType);
-                      if (!conf) return <p>50%</p>;
+                      if (!conf) return <p>კონფიგურაცია არ არის მითითებული</p>;
                       const empR = conf.employeeRewards?.[selectedMechanicId];
                       const active = empR || conf;
                       if (active.rewardType === 'flat') {
