@@ -8,7 +8,7 @@ export const INITIAL_USERS: User[] = [
     lastName: '',
     username: 'zviadi',
     passwordHash: hashPassword('zviadi123'),
-    role: 'super_admin',
+    role: 'owner',
     enabledModules: ['shop', 'day_closing', 'reports'],
     createdAt: '2026-01-01T10:00:00Z',
   },

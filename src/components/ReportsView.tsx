@@ -125,37 +125,34 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     };
   });
 
-  // Calculate Admin / PaidTo shares (ვისთანაც გადაიხადეს იმისთვის დარიცხული 50% ანუ დარჩენილი წილები)
+  // Calculate cash collectors while keeping the owner profit assigned to Zviadi.
   interface PaidToShare {
     name: string;
-    totalReceived: number; // სერვისიდან სულ მიღებული თანხა გადახდისას
-    systemWalletShare: number; // 50% დარჩენილი წილი რომელიც ერგო ამ პერსონას
-    handymanPaidOut: number; // 50% რაც გაიცა ამ შეკვეთებიდან ხელოსნებზე
+    totalReceived: number; // amount physically received by this person
+    ownerProfitShare: number; // remaining amount after wages; always belongs to Zviadi
+    handymanPaidOut: number; // wages paid from these services
   }
 
-  // Aggregate all paidTo shares
+  const ownerName = 'ზვიადი';
   const paidToSharesRecords: Record<string, PaidToShare> = {};
-
-  // Initialize with everyone who may receive operational money; imedo/accountant are excluded upstream.
-  paidToSharesRecords['ზვიადი'] = { name: 'ზვიადი', totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
+  paidToSharesRecords[ownerName] = { name: ownerName, totalReceived: 0, ownerProfitShare: 0, handymanPaidOut: 0 };
   allUsers.forEach((u) => {
-    if (u.username.toLowerCase() !== 'imedo' && u.role !== 'accountant' && u.firstName !== 'ზვიადი') {
+    if (u.username.toLowerCase() !== 'imedo' && u.role !== 'accountant' && u.firstName !== ownerName) {
       const displayName = `${u.firstName} ${u.lastName}`.trim();
-      paidToSharesRecords[displayName] = { name: displayName, totalReceived: 0, systemWalletShare: 0, handymanPaidOut: 0 };
+      paidToSharesRecords[displayName] = { name: displayName, totalReceived: 0, ownerProfitShare: 0, handymanPaidOut: 0 };
     }
   });
 
-  // Calculate
   periodOrders.forEach((order) => {
     if (order.paymentStatus !== 'paid') return;
     const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
-    const paidToName = order.paidTo || 'ზვიადი';
+    const paidToName = order.paidTo || ownerName;
 
     if (!paidToSharesRecords[paidToName]) {
       paidToSharesRecords[paidToName] = {
         name: paidToName,
         totalReceived: 0,
-        systemWalletShare: 0,
+        ownerProfitShare: 0,
         handymanPaidOut: 0,
       };
     }
@@ -163,15 +160,14 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     orderSrvList.forEach((srv) => {
       paidToSharesRecords[paidToName].totalReceived += srv.price;
       const totalMechPay = srv.mechanicEarning + (srv.coMechanicEarning || 0);
-      const systemShare = srv.price - totalMechPay;
-      paidToSharesRecords[paidToName].systemWalletShare += systemShare;
+      const ownerProfit = srv.price - totalMechPay;
+      paidToSharesRecords[paidToName].ownerProfitShare += ownerProfit;
       paidToSharesRecords[paidToName].handymanPaidOut += totalMechPay;
     });
   });
 
-  // Filter out records that are empty only if they are not system default admins like Zviad
   const activePaidToShares = Object.values(paidToSharesRecords).filter(
-    (item) => item.name === 'ზვიადი' || item.totalReceived > 0
+    (item) => item.name === ownerName || item.totalReceived > 0
   );
 
   // Dynamic label for categories
@@ -293,11 +289,11 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
         </div>
       </div>
 
-      {/* ვისთან გადაიხადეს (Paid To Shares) - 50%/50% SPLIT AUDITING PANEL */}
+      {/* ვისთან გადაიხადეს (Paid To) and who owns the remaining profit */}
       <div className="flex items-center justify-between pl-1 mb-2.5">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-1">
           <Wallet className="w-3.5 h-3.5 text-green-400" />
-          თანხების მიმღებები და გადანაწილება (50%)
+          თანხების მიმღებები და ზვიადის წილი
         </h3>
         <span className="text-[9px] text-slate-500 italic block leading-none">კასა (Paid To)</span>
       </div>
@@ -323,14 +319,13 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
                 </div>
               </div>
 
-              {/* Graphical representation of splits */}
               <div className="grid grid-cols-2 gap-2 text-[11px] bg-slate-950 p-2.5 rounded-xl border border-slate-850">
                 <div className="space-y-0.5 border-r border-slate-850 pr-2">
-                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">ზვიადის / სერვისის წილი (50%):</span>
-                  <span className="text-green-400 font-mono font-black">{item.systemWalletShare} ₾</span>
+                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">ზვიადის წილი ხელფასების შემდეგ:</span>
+                  <span className="text-green-400 font-mono font-black">{item.ownerProfitShare} ₾</span>
                 </div>
                 <div className="space-y-0.5 pl-2">
-                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">გაიცა ხელოსნებზე (50%):</span>
+                  <span className="text-slate-500 block text-[9px] font-bold uppercase tracking-wide">გაიცა ხელოსნებზე:</span>
                   <span className="text-cyan-400 font-mono font-black">{item.handymanPaidOut} ₾</span>
                 </div>
               </div>

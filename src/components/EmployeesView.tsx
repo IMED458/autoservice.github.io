@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, Role, getUserRoleLabel, isOwnerLike } from '../types';
+import { User, Role, getUserRoleLabel, isOwnerLike, isOwnerUser } from '../types';
 import { hashPassword } from '../utils/crypto';
 import { UserPlus, Trash2, Shield, Wrench, AlertCircle, Edit, Save, X, Crown } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -52,7 +52,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
       username: username.trim().toLowerCase(),
       passwordHash: hashPassword(password),
       role,
-      enabledModules: role === 'super_admin' || role === 'manager' ? ['shop', 'day_closing', 'reports'] : [],
+      enabledModules: role === 'owner' || role === 'super_admin' || role === 'manager' ? ['shop', 'day_closing', 'reports'] : [],
     });
     setSuccess('თანამშრომელი დაემატა!');
     setFirstName(''); setLastName(''); setUsername(''); setPassword('');
@@ -108,6 +108,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   ];
 
   const getRoleIcon = (r: Role) => {
+    if (r === 'owner') return <Crown className="w-4 h-4" />;
     if (r === 'super_admin') return <Crown className="w-4 h-4" />;
     if (r === 'admin') return <Shield className="w-4 h-4" />;
     if (r === 'manager') return <Crown className="w-4 h-4" />;
@@ -116,6 +117,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   };
 
   const getRoleStyle = (r: Role) => {
+    if (r === 'owner') return 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400';
     if (r === 'super_admin') return 'bg-purple-500/10 border-purple-500/20 text-purple-400';
     if (r === 'admin') return 'bg-amber-500/10 border-amber-500/20 text-amber-400';
     if (r === 'manager') return 'bg-indigo-500/10 border-indigo-500/20 text-indigo-400';
@@ -123,7 +125,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
     return 'bg-cyan-500/10 border-cyan-500/20 text-cyan-400';
   };
 
-  // All available roles — owner/manager can assign any role; admin can only assign mechanic/manager
+  // Owner is reserved for Zviadi by migration; new users cannot be promoted to owner from the UI.
   const allRoleOptions: { value: Role; label: string }[] = [
     { value: 'super_admin', label: 'სუპერ ადმინი' },
     { value: 'manager', label: 'მენეჯერი' },
@@ -148,6 +150,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
 
   const canDelete = (u: User) => {
     if (u.id === currentUser.id) return false;
+    if (isOwnerUser(u)) return false;
     // Protect the developer account from deletion
     if (u.username.toLowerCase() === 'imedo') return false;
     if (isOwner) return true;
@@ -158,6 +161,7 @@ export default function EmployeesView({ users, currentUser, onAddUser, onUpdateU
   // Can we change this user's role in the edit modal?
   const canEditRole = (u: User) => {
     if (u.id === currentUser.id) return false;  // can't change own role
+    if (isOwnerUser(u)) return false;            // Zviadi must remain the only owner
     if (u.username.toLowerCase() === 'imedo') return false;    // protect dev account role
     return isOwner || isAdmin;
   };

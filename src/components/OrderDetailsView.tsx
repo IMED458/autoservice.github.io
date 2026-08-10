@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
-  ServiceTypeConfig, calculateMechanicEarning, ROLE_LABELS,
+  ServiceTypeConfig, calculateMechanicEarning,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
-  isAssignableMechanic,
+  isAdminRole, isOwnerLike, isAssignableMechanic,
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,7 +24,7 @@ export default function OrderDetailsView({
   order, services, mechanics, allUsers, currentUser, serviceConfigs, onSaveTransaction, onBack, onDeleteOrder,
 }: OrderDetailsViewProps) {
   const isMechanic = currentUser.role === 'mechanic';
-  const isAdminLike = currentUser.role === 'super_admin' || currentUser.role === 'admin' || currentUser.role === 'manager';
+  const isAdminLike = isAdminRole(currentUser.role);
   const mechanicOptions = mechanics.filter(isAssignableMechanic);
 
   const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
@@ -185,7 +185,7 @@ export default function OrderDetailsView({
         </button>
         <div className="flex items-center gap-2">
           <span className="text-xs text-slate-500 font-mono">ID: {draftOrder.id.split('-')[1] || draftOrder.id}</span>
-          {(currentUser.role === 'super_admin' || currentUser.role === 'manager') && onDeleteOrder && (
+          {isOwnerLike(currentUser.role) && onDeleteOrder && (
             <button
               onClick={() => { if (confirm('ნამდვილად წაიშალოს ეს დავალება? (ყველა სერვისი წაიშლება)')) onDeleteOrder(order.id); }}
               className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 bg-red-950/20 border border-red-500/20 px-2.5 py-1.5 rounded-xl cursor-pointer"

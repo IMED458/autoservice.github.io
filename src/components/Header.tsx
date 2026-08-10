@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { User, getUserRoleLabel } from '../types';
+import { User, getUserRoleLabel, isOwnerLike } from '../types';
 import { LogOut, ShieldCheck, Wrench, Crown } from 'lucide-react';
 
 interface HeaderProps {
@@ -37,7 +37,7 @@ export default function Header({ currentUser, onLogout }: HeaderProps) {
         {/* User Badge & Logout Option */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 bg-slate-950/80 border border-slate-800 px-3 py-1.5 rounded-xl">
-            {currentUser.role === 'super_admin' || currentUser.role === 'manager' ? (
+            {isOwnerLike(currentUser.role) ? (
               <Crown className="w-3.5 h-3.5 text-purple-400" />
             ) : currentUser.role === 'admin' ? (
               <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />

@@ -110,16 +110,18 @@ export default function App() {
           DEFAULT_SERVICE_CONFIGS.forEach(c => batch.set(doc(db, 'serviceConfigs', c.id), c));
           DEFAULT_CAR_BRANDS.forEach(b => batch.set(doc(db, 'carBrands', b.id), b));
         } else {
-          // Ensure owner (super_admin) account exists and credentials are up-to-date
-          const ownerDoc = usersSnap.docs.find(d => d.data().role === 'super_admin' || d.data().username === 'zviad' || d.data().username === 'zviadi');
+          // Ensure Zviadi is the only real owner account and credentials are up-to-date.
+          const ownerDoc = usersSnap.docs.find(d => {
+            const data = d.data() as User;
+            return data.username === 'zviad' || data.username === 'zviadi' || data.firstName === 'ზვიადი';
+          });
           if (!ownerDoc) {
-            // No owner at all — create one
             await setDoc(doc(db, 'users', INITIAL_USERS[0].id), INITIAL_USERS[0]);
-          } else if (ownerDoc.data().username !== 'zviadi') {
-            // Owner exists but has old username — migrate credentials
+          } else {
             await updateDoc(doc(db, 'users', ownerDoc.id), {
               username: INITIAL_USERS[0].username,
               passwordHash: INITIAL_USERS[0].passwordHash,
+              role: 'owner',
             });
           }
           // Ensure technical super admin account (imedo) exists with correct role.
@@ -134,6 +136,9 @@ export default function App() {
           const nonWorkerIds = new Set<string>();
           usersSnap.docs.forEach(userDoc => {
             const u = userDoc.data() as User;
+            if (u.role === 'owner' && userDoc.id !== ownerDoc?.id) {
+              batch.update(doc(db, 'users', userDoc.id), { role: u.username?.toLowerCase() === 'imedo' ? 'super_admin' : 'manager' });
+            }
             if (u.role === 'accountant' || u.username?.toLowerCase() === 'imedo') nonWorkerIds.add(userDoc.id);
           });
           nonWorkerIds.add(devDoc?.id || devUser.id);

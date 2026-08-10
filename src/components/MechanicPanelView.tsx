@@ -54,8 +54,9 @@ function OwnerProfitView({
 
   // Helper: compute revenue + wages for a set of services filtered by order dates
   const computeStats = (srvList: ServiceItem[]) => {
-    const revenue = srvList.reduce((s, x) => s + x.price, 0);
-    const wages = srvList.reduce((s, x) => {
+    const paidServices = srvList.filter(x => orders.find(o => o.id === x.orderId)?.paymentStatus === 'paid');
+    const revenue = paidServices.reduce((s, x) => s + x.price, 0);
+    const wages = paidServices.reduce((s, x) => {
       const mechWage = nonWorkerIds.has(x.mechanicId) ? 0 : x.mechanicEarning;
       const coWage = (x.coMechanicId && nonWorkerIds.has(x.coMechanicId)) ? 0 : (x.coMechanicEarning || 0);
       return s + mechWage + coWage;

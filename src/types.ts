@@ -1,4 +1,4 @@
-export type Role = 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer' | 'accountant';
+export type Role = 'owner' | 'super_admin' | 'admin' | 'manager' | 'mechanic' | 'developer' | 'accountant';
 
 export interface User {
   id: string;
@@ -162,6 +162,7 @@ export interface CarBrand {
 }
 
 export const ROLE_LABELS: Record<Role, string> = {
+  owner: 'მფლობელი',
   super_admin: 'სუპერ ადმინი',
   admin: 'ადმინისტრატორი',
   manager: 'მენეჯერი',
@@ -177,8 +178,12 @@ export function isAssignableMechanic(user: Pick<User, 'role' | 'username'>): boo
 }
 
 export function getUserRoleLabel(user: Pick<User, 'role' | 'username' | 'firstName'>): string {
-  if (user.username.toLowerCase() === 'zviadi' || user.firstName === 'ზვიადი') return 'მფლობელი';
+  if (isOwnerUser(user)) return 'მფლობელი';
   return ROLE_LABELS[user.role];
+}
+
+export function isOwnerUser(user: Pick<User, 'role' | 'username' | 'firstName'>): boolean {
+  return user.role === 'owner' || user.username.toLowerCase() === 'zviadi' || user.firstName === 'ზვიადი';
 }
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
@@ -232,11 +237,11 @@ export function calculateMechanicEarning(
 }
 
 export function hasModule(user: User, mod: string): boolean {
-  return user.role === 'super_admin' || user.role === 'developer' || user.role === 'manager' || (user.enabledModules ?? []).includes(mod);
+  return user.role === 'owner' || user.role === 'super_admin' || user.role === 'developer' || user.role === 'manager' || (user.enabledModules ?? []).includes(mod);
 }
 
 export function hasAdminAccess(user: Pick<User, 'role'>): boolean {
-  return user.role === 'super_admin' || user.role === 'admin' || user.role === 'manager' || user.role === 'developer';
+  return user.role === 'owner' || user.role === 'super_admin' || user.role === 'admin' || user.role === 'manager' || user.role === 'developer';
 }
 
 export function hasFullSystemAccess(user: Pick<User, 'role'>): boolean {
@@ -245,10 +250,10 @@ export function hasFullSystemAccess(user: Pick<User, 'role'>): boolean {
 
 /** Returns true for roles that have dashboard/admin-like access */
 export function isAdminRole(role: Role): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer' || role === 'accountant';
+  return role === 'owner' || role === 'super_admin' || role === 'admin' || role === 'manager' || role === 'developer' || role === 'accountant';
 }
 
-/** Returns true for roles that have OWNER-level full access (super_admin and manager are equivalent) */
+/** Returns true for roles that have OWNER-level business access. Only `owner` is the ownership role. */
 export function isOwnerLike(role: Role): boolean {
-  return role === 'super_admin' || role === 'manager';
+  return role === 'owner' || role === 'super_admin' || role === 'manager';
 }

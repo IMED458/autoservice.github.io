@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAssignableMechanic } from '../types';
+import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isAssignableMechanic } from '../types';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -168,7 +168,7 @@ export default function DashboardView({
   return (
     <div className="max-w-lg mx-auto p-4 pb-24 bg-slate-950 text-slate-100 font-sans md:max-w-6xl md:px-8 lg:px-12">
       {/* Admin Action Block */}
-      {(currentUser.role === 'admin' || currentUser.role === 'super_admin' || currentUser.role === 'manager') && (
+      {isAdminRole(currentUser.role) && (
         <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }} className="mb-6">
           <button
             id="quick-add-car-btn"
