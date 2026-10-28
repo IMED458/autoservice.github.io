@@ -255,6 +255,9 @@ export default function App() {
     const safeAssignedEmployeeIds = (fields.assignedEmployeeIds || []).filter(id => assignableWorkerIds.has(id));
     const o: CarServiceOrder = {
       ...fields,
+      // An old car registered with a past date gets its payment/completion on that date unless given
+      paidAt: fields.paymentStatus === 'paid' ? fields.paidAt || fields.date : undefined,
+      completedAt: fields.status === 'completed' ? fields.completedAt || fields.date : undefined,
       assignedEmployeeIds: safeAssignedEmployeeIds.length > 0 ? safeAssignedEmployeeIds : undefined,
       id,
       createdBy: currentUser?.id || 'unknown',
@@ -298,7 +301,7 @@ export default function App() {
     const nowIso = new Date().toISOString();
     const prevOrder = orders.find(o => o.id === orderId);
     safeOrder.paidAt = safeOrder.paymentStatus === 'paid'
-      ? (prevOrder?.paymentStatus === 'paid' ? prevOrder.paidAt : nowIso)
+      ? (safeOrder.paidAt || (prevOrder?.paymentStatus === 'paid' ? prevOrder.paidAt : nowIso))
       : undefined;
     safeOrder.completedAt = safeOrder.status === 'completed'
       ? (prevOrder?.status === 'completed' ? prevOrder.completedAt || prevOrder.updatedAt : nowIso)

@@ -196,8 +196,8 @@ export default function DashboardView({
       {/* Day filter */}
       <div className="flex items-center gap-2 mb-4">
         <span className="text-[11px] text-slate-400 font-bold whitespace-nowrap">დღე:</span>
-        <DateField value={filterDay} onChange={setFilterDay}
-          className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" />
+        <DateField value={filterDay} onChange={setFilterDay} wrapperClassName="relative flex-1 min-w-0"
+          className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" />
         <button type="button" onClick={() => setFilterDay(toISODateInputValue())}
           className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border cursor-pointer ${filterDay === toISODateInputValue() ? 'bg-amber-500 text-slate-950 border-amber-500' : 'bg-slate-900 border-slate-800 text-slate-300'}`}>დღეს</button>
         {filterDay && (

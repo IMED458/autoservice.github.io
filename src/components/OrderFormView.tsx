@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User, isAssignableMechanic } from '../types';
+import { CarServiceOrder, OrderStatus, PaymentStatus, CarBrand, User, isAssignableMechanic, PAID_TO_OPTIONS } from '../types';
 import { Calendar, Car, User as UserIcon, Phone, Plus, FileText, CheckCircle, ChevronDown, Wrench, UserCheck } from 'lucide-react';
 import { motion } from 'motion/react';
 import { toISODateInputValue } from '../utils/date';
@@ -34,6 +34,8 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
   const [problemDescription, setProblemDescription] = useState('');
   const [status, setStatus] = useState<OrderStatus>('new');
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus>('unpaid');
+  const [paidDate, setPaidDate] = useState('');   // '' → same as registration date
+  const [paidTo, setPaidTo] = useState(PAID_TO_OPTIONS[0]);
   const [assignedEmployeeIds, setAssignedEmployeeIds] = useState<string[]>([]);
   const [assignedServiceType, setAssignedServiceType] = useState('');
   const [saving, setSaving] = useState(false);
@@ -78,6 +80,7 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
         problemDescription: problemDescription.trim() || 'არაა აღწერილი',
         status,
         paymentStatus,
+        ...(paymentStatus === 'paid' ? { paidAt: paidDate || date || todayStr, paidTo } : {}),
         ...(assignedEmployeeIds.length > 0 ? { assignedEmployeeIds } : {}),
         ...(assignedServiceType ? { assignedServiceType } : {}),
       });
@@ -311,6 +314,24 @@ export default function OrderFormView({ carBrands, allUsers, serviceTypeNames, o
             </select>
           </div>
         </div>
+
+        {paymentStatus === 'paid' && (
+          <div className="grid grid-cols-2 gap-3 bg-slate-950 border border-slate-800 rounded-xl p-3">
+            <div>
+              <label className="block text-[11px] font-semibold text-amber-500 mb-1">გადახდის თარიღი</label>
+              <DateField value={paidDate || date} onChange={setPaidDate}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500/60" />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-amber-500 mb-1">ვისთან გადაიხადა</label>
+              <select value={paidTo} onChange={e => setPaidTo(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-2 text-xs text-slate-200">
+                {PAID_TO_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </div>
+            <p className="col-span-2 text-[10px] text-slate-500">ძველი მანქანის დამატებისას ხელფასები დაირიცხება მითითებული გადახდის თარიღით.</p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-3 pt-3">
           <button type="button" onClick={onCancel}

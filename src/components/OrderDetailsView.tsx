@@ -8,7 +8,8 @@ import {
 } from '../types';
 import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X, Lock, CloudCheck, CloudUpload, CloudAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { formatDateDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
+import DateField from './DateField';
 
 interface OrderDetailsViewProps {
   order: CarServiceOrder;
@@ -122,6 +123,7 @@ export default function OrderDetailsView({
   const [editNumber, setEditNumber] = useState(draftOrder.carNumber);
   const [editClientName, setEditClientName] = useState(draftOrder.clientFullName);
   const [editPhone, setEditPhone] = useState(draftOrder.clientPhone);
+  const [editDate, setEditDate] = useState(draftOrder.date);
 
   // Service inline edit
   const [editingSrvId, setEditingSrvId] = useState<string | null>(null);
@@ -330,6 +332,7 @@ export default function OrderDetailsView({
       carNumber: editNumber.toUpperCase(),
       clientFullName: editClientName,
       clientPhone: editPhone,
+      date: editDate || prev.date,
     }));
     setIsEditingAdmin(false);
   };
@@ -418,7 +421,7 @@ export default function OrderDetailsView({
 
                 {isAdminLike && (
                   <button
-                    onClick={() => { setEditBrand(draftOrder.carBrand); setEditNumber(draftOrder.carNumber); setEditClientName(draftOrder.clientFullName); setEditPhone(draftOrder.clientPhone); setIsEditingAdmin(true); }}
+                    onClick={() => { setEditBrand(draftOrder.carBrand); setEditNumber(draftOrder.carNumber); setEditClientName(draftOrder.clientFullName); setEditPhone(draftOrder.clientPhone); setEditDate(draftOrder.date); setIsEditingAdmin(true); }}
                     className="w-full py-1.5 bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-400 hover:text-slate-200 rounded-xl text-xs font-semibold cursor-pointer flex items-center justify-center gap-1.5">
                     <Settings className="w-3.5 h-3.5" /> მონაცემების რედაქტირება
                   </button>
@@ -427,6 +430,11 @@ export default function OrderDetailsView({
             ) : (
               <div className="space-y-3">
                 <h3 className="text-sm font-bold text-amber-500 mb-1">ინფორმაციის განახლება</h3>
+                <div>
+                  <label className="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">მიღების თარიღი</label>
+                  <DateField value={editDate} onChange={setEditDate}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" />
+                </div>
                 <div>
                   <label className="block text-[10px] uppercase font-bold text-slate-400 mb-0.5">მარკა და მოდელი</label>
                   <input type="text" value={editBrand} onChange={e => setEditBrand(e.target.value.toUpperCase())} lang="en"
@@ -485,7 +493,11 @@ export default function OrderDetailsView({
                 <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-hidden">
                   {(['unpaid', 'paid'] as PaymentStatus[]).map(pay => (
                     <button key={pay} disabled={isMechanic}
-                      onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? (prev.paidTo && PAID_TO_OPTIONS.includes(prev.paidTo) ? prev.paidTo : paidToOptions[0].label) : undefined }))}
+                      onClick={() => setDraftOrder(prev => ({
+                        ...prev, paymentStatus: pay,
+                        paidTo: pay === 'paid' ? (prev.paidTo && PAID_TO_OPTIONS.includes(prev.paidTo) ? prev.paidTo : paidToOptions[0].label) : undefined,
+                        paidAt: pay === 'paid' ? (prev.paymentStatus === 'paid' ? prev.paidAt : toISODateInputValue()) : undefined,
+                      }))}
                       className={`min-w-0 px-1 py-2 text-[10px] leading-tight font-bold rounded-lg transition-all whitespace-normal break-words text-center ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                         draftOrder.paymentStatus === pay
                           ? pay === 'paid' ? 'bg-green-500 text-slate-950' : 'bg-rose-500 text-slate-100'
@@ -507,6 +519,11 @@ export default function OrderDetailsView({
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
                   {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
                 </select>
+                <label className="block text-[10px] text-amber-500 uppercase font-bold pt-1.5">გადახდის თარიღი</label>
+                <DateField value={(draftOrder.paidAt || draftOrder.date || '').slice(0, 10)} disabled={isMechanic}
+                  onChange={d => d && setDraftOrder(prev => ({ ...prev, paidAt: d }))}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50 disabled:opacity-60" />
+                <p className="text-[10px] text-slate-500">ხელფასები დაირიცხება ამ თარიღით.</p>
               </motion.div>
             )}
           </div>
