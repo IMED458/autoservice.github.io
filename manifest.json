@@ -1,7 +1,7 @@
 {
-  "name": "AutoGO — New Auto Motors",
-  "short_name": "AutoGO",
-  "description": "New Auto Motors — ავტო სერვისის მართვის სისტემა",
+  "name": "PIT Service",
+  "short_name": "PIT Service",
+  "description": "PIT Service — ავტო სერვისის მართვის სისტემა",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#020617",
