@@ -576,7 +576,7 @@ export default function POSSection({ products, orders, onAddSale, currentUser }:
             {/* Header POS slip details */}
             <div className="text-center space-y-1">
               <Sparkles className="w-8 h-8 text-amber-400 mx-auto" aria-hidden="true" />
-              <h3 className="text-sm font-black leading-none uppercase tracking-widest font-mono">ავტოსერვისი / მაღაზია</h3>
+              <h3 className="text-sm font-black leading-none uppercase tracking-widest font-mono">PIT Service / მაღაზია</h3>
               <p className="text-[10px] text-slate-500 font-mono">მისამართი: თბილისი, საქართველო</p>
               <p className="text-[9px] text-slate-400 font-mono">ოპერატორი: {successSale.createdBy}</p>
             </div>

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   CarServiceOrder, User, ServiceItem, ServiceTypeConfig,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
+  findOwnerId, getServiceHelpers, isServiceParticipant, splitServiceMoney,
 } from '../types';
 import { Search, Filter, Phone, User as UserIcon, HelpCircle, RefreshCw } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -43,6 +44,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
   };
 
   const getServiceLabel = (typeId: string) => serviceConfigs.find(c => c.id === typeId)?.name || typeId;
+  const ownerId = findOwnerId(mechanics);
 
   const filteredOrders = orders.filter((order) => {
     if (filterCarPlate && !order.carNumber.toLowerCase().includes(filterCarPlate.toLowerCase())) return false;
@@ -54,7 +56,7 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
       if (filterWorkStatus === 'ongoing' && order.status === 'completed') return false;
     }
     const orderSrvList = services.filter(s => s.orderId === order.id);
-    if (filterMechanicId && !orderSrvList.some(s => s.mechanicId === filterMechanicId || s.coMechanicId === filterMechanicId)) return false;
+    if (filterMechanicId && !orderSrvList.some(s => isServiceParticipant(s, filterMechanicId))) return false;
     if (filterServiceType && !orderSrvList.some(s => s.serviceType === filterServiceType)) return false;
     return true;
   });
@@ -187,15 +189,15 @@ export default function HistoryView({ orders, services, mechanics, serviceConfig
           {filteredOrders.map((order) => {
             const orderSrvList = services.filter(s => s.orderId === order.id);
             const totalCost = orderSrvList.reduce((sum, s) => sum + s.price, 0);
-            const totalEarning = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning + (s.coMechanicEarning || 0), 0);
+            const totalEarning = Math.round(orderSrvList.reduce((sum, s) => sum + splitServiceMoney(s, ownerId).wages, 0) * 100) / 100;
 
             const uniqueMechNames = Array.from(new Set([
               ...orderSrvList.map(srv => {
                 const m = mechanics.find(m => m.id === srv.mechanicId);
                 return m ? `${m.firstName} ${m.lastName}` : null;
               }),
-              ...orderSrvList.filter(s => s.coMechanicId).map(srv => {
-                const m = mechanics.find(m => m.id === srv.coMechanicId);
+              ...orderSrvList.flatMap(srv => getServiceHelpers(srv)).map(h => {
+                const m = mechanics.find(m => m.id === h.mechanicId);
                 return m ? `${m.firstName} ${m.lastName}` : null;
               }),
             ].filter((n): n is string => !!n)));

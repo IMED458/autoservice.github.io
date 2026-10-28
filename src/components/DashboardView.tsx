@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isAssignableMechanic } from '../types';
-import { formatDateDDMMYYYY } from '../utils/date';
+import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
+import DateField from './DateField';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -116,6 +117,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all_active');
+  const [filterDay, setFilterDay] = useState('');
 
   // "My Tasks": orders explicitly assigned to current user that are not completed
   const canHaveAssignedTasks = isAssignableMechanic(currentUser);
@@ -135,6 +137,7 @@ export default function DashboardView({
       order.clientPhone.includes(q);
 
     if (!matchesSearch) return false;
+    if (filterDay && order.date !== filterDay) return false;
 
     if (selectedStatusFilter === 'my-tasks')
       return canHaveAssignedTasks && (order.assignedEmployeeIds || []).includes(currentUser.id) && order.status !== 'completed';
@@ -189,6 +192,19 @@ export default function DashboardView({
           </button>
         </motion.div>
       )}
+
+      {/* Day filter */}
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-[11px] text-slate-400 font-bold whitespace-nowrap">დღე:</span>
+        <DateField value={filterDay} onChange={setFilterDay}
+          className="flex-1 min-w-0 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500" />
+        <button type="button" onClick={() => setFilterDay(toISODateInputValue())}
+          className={`px-2.5 py-1.5 text-[11px] font-bold rounded-lg border cursor-pointer ${filterDay === toISODateInputValue() ? 'bg-amber-500 text-slate-950 border-amber-500' : 'bg-slate-900 border-slate-800 text-slate-300'}`}>დღეს</button>
+        {filterDay && (
+          <button type="button" onClick={() => setFilterDay('')}
+            className="px-2.5 py-1.5 text-[11px] font-bold rounded-lg border bg-slate-900 border-slate-800 text-rose-400 cursor-pointer">×</button>
+        )}
+      </div>
 
       {/* Title & count */}
       <div className="flex items-baseline justify-between mb-4">

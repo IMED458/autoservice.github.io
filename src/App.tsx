@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, PAID_TO_OPTIONS, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { db } from './firebase';
@@ -24,6 +24,7 @@ import MechanicPanelView from './components/MechanicPanelView';
 import StoreView from './components/StoreView';
 import DayClosingSection from './components/DayClosingSection';
 import SettingsView from './components/SettingsView';
+import UnpaidView from './components/UnpaidView';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -44,7 +45,7 @@ function normalizePaidToName(paidTo?: string): string | undefined {
   const name = paidTo?.trim();
   if (!name) return undefined;
   if (['imedo', 'იმედო', 'გიორგი იმედაშვილი'].includes(name.toLowerCase())) return 'ზვიადი';
-  if (name === 'გიორგი') return 'გიორგი მენეჯერი';
+  if (name === 'გიორგი' || name.startsWith('გიორგი')) return 'გიორგი მენეჯერი';
   return name;
 }
 
@@ -268,26 +269,46 @@ export default function App() {
   const handleSaveOrderTransaction = async (
     orderId: string,
     updatedOrder: CarServiceOrder,
-    updatedServices: ServiceItem[]
+    updatedServices: ServiceItem[],
+    options?: { stay?: boolean }
   ) => {
     const batch = writeBatch(db);
     const assignableWorkerIds = users.filter(isAssignableMechanic).map(u => u.id);
-    const sanitizedServices = updatedServices.filter(s =>
-      assignableWorkerIds.includes(s.mechanicId) &&
-      (!s.coMechanicId || assignableWorkerIds.includes(s.coMechanicId))
-    );
+    const sanitizedServices = updatedServices
+      .filter(s => assignableWorkerIds.includes(s.mechanicId))
+      .map(s => {
+        const helpers = (s.helpers || []).filter(h => assignableWorkerIds.includes(h.mechanicId) && h.mechanicId !== s.mechanicId);
+        const legacyOk = !s.coMechanicId || assignableWorkerIds.includes(s.coMechanicId);
+        if (s.helpers) {
+          const { coMechanicId: _a, coMechanicEarning: _b, helpers: _c, ...base } = s;
+          return {
+            ...base,
+            ...(helpers.length > 0 ? { helpers, coMechanicId: helpers[0].mechanicId, coMechanicEarning: helpers[0].earning } : {}),
+          } as ServiceItem;
+        }
+        return legacyOk ? s : { ...s, coMechanicId: undefined, coMechanicEarning: undefined };
+      });
+    const paidTo = normalizePaidToName(updatedOrder.paidTo);
     const safeOrder: CarServiceOrder = {
       ...updatedOrder,
       assignedEmployeeIds: (updatedOrder.assignedEmployeeIds || []).filter(id => assignableWorkerIds.includes(id)),
-      paidTo: updatedOrder.paymentStatus === 'paid' ? normalizePaidToName(updatedOrder.paidTo) || 'ზვიადი' : undefined,
+      paidTo: updatedOrder.paymentStatus === 'paid' ? (paidTo && PAID_TO_OPTIONS.includes(paidTo) ? paidTo : 'ზვიადი') : undefined,
     };
 
-    batch.set(doc(db, 'orders', orderId), stripUndefined({ ...safeOrder, updatedAt: new Date().toISOString() }));
-    const oldSrvs = services.filter(s => s.orderId === orderId);
-    oldSrvs.forEach(s => batch.delete(doc(db, 'services', s.id)));
+    const nowIso = new Date().toISOString();
+    const prevOrder = orders.find(o => o.id === orderId);
+    safeOrder.paidAt = safeOrder.paymentStatus === 'paid'
+      ? (prevOrder?.paymentStatus === 'paid' ? prevOrder.paidAt : nowIso)
+      : undefined;
+    safeOrder.completedAt = safeOrder.status === 'completed'
+      ? (prevOrder?.status === 'completed' ? prevOrder.completedAt || prevOrder.updatedAt : nowIso)
+      : undefined;
+    batch.set(doc(db, 'orders', orderId), stripUndefined({ ...safeOrder, updatedAt: nowIso }));
+    const keepIds = new Set(sanitizedServices.map(s => s.id));
+    services.filter(s => s.orderId === orderId && !keepIds.has(s.id)).forEach(s => batch.delete(doc(db, 'services', s.id)));
     sanitizedServices.forEach(s => batch.set(doc(db, 'services', s.id), stripUndefined(s)));
     await batch.commit();
-    setActiveView('regular-tab');
+    if (!options?.stay) setActiveView('regular-tab');
   };
 
   const handleAddUser = async (fields: Omit<User, 'id' | 'createdAt'>) => {
@@ -541,6 +562,16 @@ export default function App() {
                     />
                   )}
                 </>
+              )}
+              {currentTab === 'unpaid' && (
+                <UnpaidView
+                  orders={orders}
+                  services={services}
+                  allUsers={users}
+                  currentUser={currentUser}
+                  serviceConfigs={serviceConfigs}
+                  onSelectOrder={handleSelectOrder}
+                />
               )}
             </motion.div>
           )}

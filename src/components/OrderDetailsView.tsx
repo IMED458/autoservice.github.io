@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
-  ServiceTypeConfig, calculateMechanicEarning,
+  ServiceTypeConfig, calculateMechanicEarning, buildServiceShares, getFixedCoMechanic, getFixedCoEarning,
+  getServiceHelpers, getServiceShares, findOwnerId, formatSharePct, HelperDraft, PAID_TO_OPTIONS,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
   isAdminRole, isOwnerLike, isAssignableMechanic,
 } from '../types';
-import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X } from 'lucide-react';
+import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X, Lock, CloudCheck, CloudUpload, CloudAlert } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDateDDMMYYYY } from '../utils/date';
 
@@ -16,7 +17,7 @@ interface OrderDetailsViewProps {
   allUsers: User[];
   currentUser: User;
   serviceConfigs: ServiceTypeConfig[];
-  onSaveTransaction: (orderId: string, updatedOrder: CarServiceOrder, updatedServices: ServiceItem[]) => void;
+  onSaveTransaction: (orderId: string, updatedOrder: CarServiceOrder, updatedServices: ServiceItem[], options?: { stay?: boolean }) => Promise<void> | void;
   onBack: () => void;
   onDeleteOrder?: (orderId: string) => void;
 }
@@ -28,31 +29,91 @@ export default function OrderDetailsView({
   const isAdminLike = isAdminRole(currentUser.role);
   const mechanicOptions = mechanics.filter(isAssignableMechanic);
 
-  const [draftOrder, setDraftOrder] = useState<CarServiceOrder>({ ...order });
-  const [draftServices, setDraftServices] = useState<ServiceItem[]>(() =>
+  const ownerId = findOwnerId(allUsers);
+  const [draftOrder, setDraftOrderRaw] = useState<CarServiceOrder>({ ...order });
+  const [draftServices, setDraftServicesRaw] = useState<ServiceItem[]>(() =>
     services.filter(s => s.orderId === order.id)
   );
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  // ── Autosave ──────────────────────────────────
+  type AutoSaveState = 'idle' | 'pending' | 'saving' | 'saved' | 'error';
+  const [autoSaveState, setAutoSaveState] = useState<AutoSaveState>('idle');
+  const dirtyRef = useRef(false);
+  const versionRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestRef = useRef({ draftOrder, draftServices, onSaveTransaction, orderId: order.id });
+  latestRef.current = { draftOrder, draftServices, onSaveTransaction, orderId: order.id };
+
+  const setDraftOrder: typeof setDraftOrderRaw = (v) => { dirtyRef.current = true; versionRef.current++; setDraftOrderRaw(v); };
+  const setDraftServices: typeof setDraftServicesRaw = (v) => { dirtyRef.current = true; versionRef.current++; setDraftServicesRaw(v); };
+
+  const runAutoSave = async () => {
+    timerRef.current = null;
+    if (!dirtyRef.current) return;
+    const version = versionRef.current;
+    const { draftOrder: o, draftServices: srvs, onSaveTransaction: save, orderId } = latestRef.current;
+    setAutoSaveState('saving');
+    try {
+      await save(orderId, o, srvs, { stay: true });
+      if (versionRef.current === version) {
+        dirtyRef.current = false;
+        setAutoSaveState('saved');
+      }
+    } catch {
+      setAutoSaveState('error');
+    }
+  };
+
   useEffect(() => {
-    setDraftOrder({ ...order });
-    setDraftServices(services.filter(s => s.orderId === order.id));
+    if (!dirtyRef.current) return;
+    setAutoSaveState('pending');
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(runAutoSave, 700);
+  }, [draftOrder, draftServices]);
+
+  // Flush pending changes when leaving the page
+  useEffect(() => () => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      runAutoSave();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (dirtyRef.current) return;
+    setDraftOrderRaw({ ...order });
+    setDraftServicesRaw(services.filter(s => s.orderId === order.id));
   }, [order, services]);
+
+  const handleManualSave = async () => {
+    if (saving) return;
+    if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
+    setSaving(true); setSaveError('');
+    try {
+      await onSaveTransaction(order.id, draftOrder, draftServices);
+      dirtyRef.current = false;
+    } catch (e: any) { setSaveError('შენახვა ვერ მოხერხდა. სცადეთ თავიდან.'); }
+    finally { setSaving(false); }
+  };
 
   // Add service form
   const [showAddServiceForm, setShowAddServiceForm] = useState(false);
   const initialSrvType = serviceConfigs[0]?.id || 'diagnostic';
   const initialSrvCfg = serviceConfigs.find(c => c.id === initialSrvType);
   const initialMechId = isAssignableMechanic(currentUser) ? currentUser.id : mechanicOptions[0]?.id || '';
-  const initialEmpCo = initialSrvCfg?.employeeRewards?.[initialMechId];
   const [serviceType, setServiceType] = useState<string>(initialSrvType);
   const [serviceDescription, setServiceDescription] = useState('');
   const [servicePrice, setServicePrice] = useState<number | string>('');
   const [selectedMechanicId, setSelectedMechanicId] = useState(initialMechId);
-  const [showCoMechanic, setShowCoMechanic] = useState(!!initialEmpCo?.coMechanicId);
-  const [coMechanicId, setCoMechanicId] = useState(initialEmpCo?.coMechanicId || '');
-  const [coMechanicEarning, setCoMechanicEarning] = useState<number | string>(initialEmpCo?.coMechanicEarning ?? '');
+  type HelperRow = { mechanicId: string; earning: string; fixed?: boolean };
+  const defaultHelperRows = (type: string, mainId: string, keep: HelperRow[] = []): HelperRow[] => {
+    const fixed = getFixedCoMechanic(type, mainId, serviceConfigs);
+    const manual = keep.filter(r => !r.fixed && r.mechanicId !== mainId && r.mechanicId !== fixed?.mechanicId);
+    return fixed ? [{ mechanicId: fixed.mechanicId, earning: '', fixed: true }, ...manual] : manual;
+  };
+  const [helperRows, setHelperRows] = useState<HelperRow[]>(() => defaultHelperRows(initialSrvType, initialMechId));
   const [serviceError, setServiceError] = useState('');
 
   // Admin edit form
@@ -68,14 +129,120 @@ export default function OrderDetailsView({
   const [editSrvDesc, setEditSrvDesc] = useState('');
   const [editSrvPriceValue, setEditSrvPriceValue] = useState<number | string>('');
   const [editSrvMechId, setEditSrvMechId] = useState('');
-  const [editSrvCoMechId, setEditSrvCoMechId] = useState('');
-  const [editSrvCoMechEarning, setEditSrvCoMechEarning] = useState<number | string>('');
-  const [showEditCoMechanic, setShowEditCoMechanic] = useState(false);
+  const [editHelperRows, setEditHelperRows] = useState<HelperRow[]>([]);
 
   const isFlatService = (type: string) => serviceConfigs.find(c => c.id === type)?.rewardType === 'flat';
 
   const totalCost = draftServices.reduce((sum, s) => sum + s.price, 0);
-  const totalMechEarnings = draftServices.reduce((sum, s) => sum + s.mechanicEarning + (s.coMechanicEarning || 0), 0);
+  const totalMechEarnings = Math.round(draftServices.reduce((sum, s) =>
+    sum + getServiceShares(s, ownerId).filter(x => x.mechanicId !== ownerId).reduce((a, x) => a + x.earning, 0), 0) * 100) / 100;
+  const userName = (id: string) => {
+    const u = allUsers.find(m => m.id === id);
+    return u ? `${u.firstName}${u.lastName ? ' ' + u.lastName : ''}` : 'უცნობი';
+  };
+
+  const rowsToDrafts = (rows: HelperRow[]): HelperDraft[] => rows.map(r => ({
+    mechanicId: r.mechanicId,
+    fixed: r.fixed,
+    earning: r.earning === '' ? null : Number(r.earning),
+  }));
+
+  const applyShares = (base: Omit<ServiceItem, 'mechanicEarning' | 'helpers' | 'coMechanicId' | 'coMechanicEarning'>, rows: HelperRow[]) => {
+    const res = buildServiceShares({
+      serviceType: base.serviceType, price: base.price, configs: serviceConfigs,
+      mainId: base.mechanicId, ownerId, helpers: rowsToDrafts(rows),
+    });
+    if (res.error) return { error: res.error };
+    const srv: ServiceItem = { ...base, mechanicEarning: res.mechanicEarning, helpers: res.helpers };
+    return { srv };
+  };
+
+  // Reusable editor for additional executors (fixed from settings + manually added)
+  const renderHelpersEditor = (
+    rows: HelperRow[], setRows: (r: HelperRow[]) => void,
+    type: string, mainId: string, priceValue: number | string,
+  ) => {
+    const price = Number(priceValue) || 0;
+    const preview = buildServiceShares({ serviceType: type, price, configs: serviceConfigs, mainId, ownerId, helpers: rowsToDrafts(rows) });
+    const fixedCfg = getFixedCoMechanic(type, mainId, serviceConfigs);
+    const usedIds = new Set([mainId, ...rows.map(r => r.mechanicId)]);
+    const manualCount = rows.filter(r => !r.fixed).length;
+    const autoShare = Math.round((calculateMechanicEarning(type, price, serviceConfigs, mainId) / (manualCount + 1)) * 100) / 100;
+    const updateRow = (i: number, patch: Partial<HelperRow>) => setRows(rows.map((r, idx) => idx === i ? { ...r, ...patch } : r));
+    return (
+      <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-[10px] font-bold text-slate-400 uppercase">დამატებითი შემსრულებლები</span>
+          <button type="button"
+            onClick={() => setRows([...rows, { mechanicId: '', earning: '' }])}
+            className="flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 flex-shrink-0">
+            <UserPlus className="w-3 h-3" /> დამატება
+          </button>
+        </div>
+        {rows.length === 0 && <p className="text-[10px] text-slate-600">მეორე შემსრულებელი არ არის დამატებული.</p>}
+        {rows.map((row, i) => {
+          const locked = !!row.fixed && isMechanic;
+          const shareEarning = preview.helpers.find(h => h.mechanicId === row.mechanicId)?.earning ?? 0;
+          return (
+            <div key={i} className={`grid grid-cols-[1fr_auto_auto] gap-1.5 items-end ${row.fixed ? 'bg-cyan-950/20 border border-cyan-500/20 rounded-lg p-1.5' : ''}`}>
+              <div className="min-w-0">
+                <label className="block text-[10px] text-slate-500 mb-0.5 truncate">
+                  {row.fixed ? <span className="text-cyan-400 inline-flex items-center gap-1"><Lock className="w-2.5 h-2.5" /> პარამეტრებიდან</span> : 'შემსრულებელი'}
+                </label>
+                <select value={row.mechanicId} disabled={!!row.fixed} onChange={e => updateRow(i, { mechanicId: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 disabled:opacity-80">
+                  <option value="">— აირჩიეთ —</option>
+                  {mechanicOptions.filter(m => m.id === row.mechanicId || !usedIds.has(m.id)).map(m => (
+                    <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="w-24">
+                <label className="block text-[10px] text-slate-500 mb-0.5">
+                  ₾ <span className="text-cyan-400">{row.fixed && fixedCfg ? (fixedCfg.rewardType === 'percentage' ? `${fixedCfg.value}%` : formatSharePct(shareEarning, price)) : formatSharePct(shareEarning, price)}</span>
+                </label>
+                {row.fixed ? (
+                  <div className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-cyan-300 font-mono">
+                    {fixedCfg ? getFixedCoEarning(fixedCfg, price) : shareEarning}
+                  </div>
+                ) : (
+                  <input type="number" value={row.earning} onChange={e => updateRow(i, { earning: e.target.value })}
+                    placeholder={String(autoShare)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
+                )}
+              </div>
+              {locked ? (
+                <div className="p-1.5 text-slate-600" title="შეცვლა შეუძლია მხოლოდ ადმინისტრაციას"><Lock className="w-3.5 h-3.5" /></div>
+              ) : (
+                <button type="button" onClick={() => setRows(rows.filter((_, idx) => idx !== i))}
+                  className="p-1.5 border border-red-500/20 bg-red-950/20 text-red-400 rounded-lg cursor-pointer">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {price > 0 && (
+          <div className="text-[10px] text-slate-400 bg-slate-950 border border-slate-800 rounded-lg p-2 space-y-0.5">
+            {preview.error ? (
+              <p className="text-rose-400">{preview.error}</p>
+            ) : (
+              <>
+                <p>{userName(mainId)}: <b className="text-emerald-400 font-mono">{preview.mechanicEarning} ₾</b> ({formatSharePct(preview.mechanicEarning, price)})</p>
+                {preview.helpers.map(h => (
+                  <p key={h.mechanicId}>{userName(h.mechanicId)}: <b className="text-cyan-400 font-mono">{h.earning} ₾</b> ({formatSharePct(h.earning, price)})</p>
+                ))}
+                {mainId !== ownerId && (() => {
+                  const rest = Math.round((price - preview.mechanicEarning - preview.helpers.filter(h => h.mechanicId !== ownerId).reduce((a, h) => a + h.earning, 0)) * 100) / 100;
+                  return <p>ზვიადი (მფლობელი): <b className="text-amber-400 font-mono">{rest} ₾</b> ({formatSharePct(rest, price)})</p>;
+                })()}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const getServiceLabel = (typeId: string) => serviceConfigs.find(c => c.id === typeId)?.name || typeId;
 
@@ -85,9 +252,14 @@ export default function OrderDetailsView({
     setEditSrvDesc(srv.description);
     setEditSrvPriceValue(srv.price);
     setEditSrvMechId(srv.mechanicId);
-    setEditSrvCoMechId(srv.coMechanicId || '');
-    setEditSrvCoMechEarning(srv.coMechanicEarning ?? '');
-    setShowEditCoMechanic(!!srv.coMechanicId);
+    const fixed = getFixedCoMechanic(srv.serviceType, srv.mechanicId, serviceConfigs);
+    const helpers = getServiceHelpers(srv);
+    const manualCount = helpers.filter(h => !(fixed && h.mechanicId === fixed.mechanicId)).length;
+    const auto = Math.round((calculateMechanicEarning(srv.serviceType, srv.price, serviceConfigs, srv.mechanicId) / (manualCount + 1)) * 100) / 100;
+    setEditHelperRows(helpers.map(h => {
+      const isFixed = !!fixed && h.mechanicId === fixed.mechanicId;
+      return { mechanicId: h.mechanicId, fixed: isFixed, earning: isFixed || Math.abs(h.earning - auto) < 0.01 ? '' : String(h.earning) };
+    }));
   };
 
   const handleSaveEditServiceInline = () => {
@@ -99,26 +271,23 @@ export default function OrderDetailsView({
       alert('გთხოვთ აირჩიოთ რეალური შემსრულებელი. ბუღალტერზე ან imedo-ზე სამუშაო ვერ მიებმება.');
       return;
     }
-    const earn = calculateMechanicEarning(editSrvType, Number(editSrvPriceValue), serviceConfigs, editSrvMechId);
-    const hasCoMech = showEditCoMechanic && editSrvCoMechId && editSrvCoMechId !== editSrvMechId;
-    if (hasCoMech && !mechanicOptions.some(m => m.id === editSrvCoMechId)) {
-      alert('მეორე შემსრულებელიც უნდა იყოს რეალური შემსრულებელი.');
+    if (editHelperRows.some(r => !r.mechanicId || !mechanicOptions.some(m => m.id === r.mechanicId))) {
+      alert('აირჩიეთ ყველა დამატებითი შემსრულებელი ან წაშალეთ ცარიელი ველი.');
       return;
     }
-    setDraftServices(prev => prev.map(s => {
-      if (s.id !== editingSrvId) return s;
-      // Build without undefined — Firestore rejects undefined fields
-      const { coMechanicId: _a, coMechanicEarning: _b, ...base } = s;
-      return {
-        ...base,
-        serviceType: editSrvType,
-        description: editSrvDesc.trim(),
-        price: Number(editSrvPriceValue),
-        mechanicId: editSrvMechId,
-        mechanicEarning: earn,
-        ...(hasCoMech ? { coMechanicId: editSrvCoMechId, coMechanicEarning: Number(editSrvCoMechEarning) || 0 } : {}),
-      };
-    }));
+    const original = draftServices.find(s => s.id === editingSrvId);
+    if (!original) return;
+    // Build without undefined — Firestore rejects undefined fields
+    const { coMechanicId: _a, coMechanicEarning: _b, helpers: _c, mechanicEarning: _d, ...base } = original;
+    const res = applyShares({
+      ...base,
+      serviceType: editSrvType,
+      description: editSrvDesc.trim(),
+      price: Number(editSrvPriceValue),
+      mechanicId: editSrvMechId,
+    }, editHelperRows);
+    if (res.error) { alert(res.error); return; }
+    setDraftServices(prev => prev.map(s => s.id === editingSrvId ? res.srv! : s));
     setEditingSrvId(null);
   };
 
@@ -132,30 +301,25 @@ export default function OrderDetailsView({
       return;
     }
 
-    const earn = calculateMechanicEarning(serviceType, Number(servicePrice), serviceConfigs, selectedMechanicId);
-    const hasCoMech = showCoMechanic && coMechanicId && coMechanicId !== selectedMechanicId;
-    if (hasCoMech && !mechanicOptions.some(m => m.id === coMechanicId)) {
-      setServiceError('მეორე შემსრულებელიც უნდა იყოს რეალური შემსრულებელი');
+    if (helperRows.some(r => !r.mechanicId || !mechanicOptions.some(m => m.id === r.mechanicId))) {
+      setServiceError('აირჩიეთ ყველა დამატებითი შემსრულებელი ან წაშალეთ ცარიელი ველი');
       return;
     }
-    const newSrv: ServiceItem = {
-      id: `srv-draft-${Date.now()}`,
+    const res = applyShares({
+      id: `srv-${Date.now()}`,
       orderId: draftOrder.id,
       serviceType,
       description: serviceDescription.trim(),
       price: Number(servicePrice),
       mechanicId: selectedMechanicId,
-      mechanicEarning: earn,
-      ...(hasCoMech ? { coMechanicId: coMechanicId, coMechanicEarning: Number(coMechanicEarning) || 0 } : {}),
       createdAt: new Date().toISOString(),
-    };
-    setDraftServices(prev => [...prev, newSrv]);
+    }, helperRows);
+    if (res.error) { setServiceError(res.error); return; }
+    setDraftServices(prev => [...prev, res.srv!]);
     if (draftOrder.status === 'new') setDraftOrder(prev => ({ ...prev, status: 'pending' }));
     setServiceDescription('');
     setServicePrice('');
-    setShowCoMechanic(false);
-    setCoMechanicId('');
-    setCoMechanicEarning('');
+    setHelperRows(defaultHelperRows(serviceType, selectedMechanicId));
     setShowAddServiceForm(false);
   };
 
@@ -170,9 +334,16 @@ export default function OrderDetailsView({
     setIsEditingAdmin(false);
   };
 
-  const paidToOptions = allUsers
-    .filter(u => u.role !== 'accountant' && u.username.toLowerCase() !== 'imedo')
-    .map(u => ({ id: u.id, label: `${u.firstName}${u.lastName ? ' ' + u.lastName : ''}` }));
+  const paidToOptions = PAID_TO_OPTIONS.map(label => ({ id: label, label }));
+
+  const autoSaveBadge = (
+    <span className={`text-[10px] flex items-center gap-1 ${autoSaveState === 'error' ? 'text-rose-400' : autoSaveState === 'saved' ? 'text-emerald-400' : 'text-slate-500'}`}>
+      {autoSaveState === 'error' ? <><CloudAlert className="w-3 h-3" /> ავტომატური შენახვა ვერ მოხერხდა</>
+        : autoSaveState === 'saving' || autoSaveState === 'pending' ? <><CloudUpload className="w-3 h-3" /> ინახება ავტომატურად...</>
+        : autoSaveState === 'saved' ? <><CloudCheck className="w-3 h-3" /> ყველა ცვლილება შენახულია</>
+        : <><CloudCheck className="w-3 h-3" /> ცვლილებები ინახება ავტომატურად</>}
+    </span>
+  );
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
@@ -289,13 +460,13 @@ export default function OrderDetailsView({
           {/* Status Controls */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">შეკვეთის მართვა</h3>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="min-w-0">
                 <span className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5">სამუშაოს სტატუსი:</span>
-                <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <div className="grid grid-cols-3 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-hidden">
                   {(['new', 'pending', 'completed'] as OrderStatus[]).map(st => (
                     <button key={st} onClick={() => setDraftOrder(prev => ({ ...prev, status: st }))}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      className={`min-w-0 px-1 py-2 text-[10px] leading-tight font-bold rounded-lg transition-all cursor-pointer whitespace-normal break-words text-center ${
                         draftOrder.status === st
                           ? st === 'new' ? 'bg-amber-500 text-slate-950 animate-pulse'
                             : st === 'pending' ? 'bg-sky-500 text-slate-950'
@@ -307,15 +478,15 @@ export default function OrderDetailsView({
                   ))}
                 </div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <span className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5">
                   გადახდა {isMechanic && '(მხოლოდ ადმინი)'}:
                 </span>
-                <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-hidden">
                   {(['unpaid', 'paid'] as PaymentStatus[]).map(pay => (
                     <button key={pay} disabled={isMechanic}
-                      onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? prev.paidTo || paidToOptions[0]?.label || '' : undefined }))}
-                      className={`py-2 text-[10px] font-bold rounded-lg transition-all ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
+                      onClick={() => setDraftOrder(prev => ({ ...prev, paymentStatus: pay, paidTo: pay === 'paid' ? (prev.paidTo && PAID_TO_OPTIONS.includes(prev.paidTo) ? prev.paidTo : paidToOptions[0].label) : undefined }))}
+                      className={`min-w-0 px-1 py-2 text-[10px] leading-tight font-bold rounded-lg transition-all whitespace-normal break-words text-center ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
                         draftOrder.paymentStatus === pay
                           ? pay === 'paid' ? 'bg-green-500 text-slate-950' : 'bg-rose-500 text-slate-100'
                           : 'text-slate-400 hover:text-slate-200'
@@ -331,7 +502,7 @@ export default function OrderDetailsView({
               <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
                 className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
                 <label className="block text-[10px] text-amber-500 uppercase font-bold">ვისთან მოხდა გადახდა?</label>
-                <select disabled={isMechanic} value={draftOrder.paidTo || paidToOptions[0]?.label || ''}
+                <select disabled={isMechanic} value={draftOrder.paidTo && PAID_TO_OPTIONS.includes(draftOrder.paidTo) ? draftOrder.paidTo : paidToOptions[0].label}
                   onChange={e => setDraftOrder(prev => ({ ...prev, paidTo: e.target.value }))}
                   className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
                   {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
@@ -382,13 +553,7 @@ export default function OrderDetailsView({
             )}
             <button
               disabled={saving}
-              onClick={async () => {
-                if (saving) return;
-                setSaving(true); setSaveError('');
-                try { await onSaveTransaction(order.id, draftOrder, draftServices); }
-                catch (e: any) { setSaveError('შენახვა ვერ მოხერხდა. სცადეთ თავიდან.'); }
-                finally { setSaving(false); }
-              }}
+              onClick={handleManualSave}
               className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl uppercase tracking-widest cursor-pointer active:scale-95 hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {saving
@@ -404,7 +569,7 @@ export default function OrderDetailsView({
             <div className="flex items-center justify-between mb-3 border-b border-slate-800/85 pb-2">
               <div>
                 <h3 className="text-sm font-bold text-slate-100">მომსახურებების სია</h3>
-                <span className="text-[10px] text-slate-500">ცვლილებები ძალაში შევა შენახვისას</span>
+                {autoSaveBadge}
               </div>
               <button onClick={() => setShowAddServiceForm(!showAddServiceForm)}
                 className="flex items-center gap-1 text-xs text-slate-950 bg-amber-500 hover:bg-amber-600 font-bold px-3 py-1.5 rounded-xl cursor-pointer">
@@ -428,21 +593,7 @@ export default function OrderDetailsView({
                       <select value={serviceType} onChange={e => {
                         const t = e.target.value;
                         setServiceType(t);
-                        const cfg = serviceConfigs.find(c => c.id === t);
-                        const empCo = cfg?.employeeRewards?.[selectedMechanicId];
-                        const coId = empCo?.coMechanicId;
-                        if (coId) {
-                          const earning = empCo!.coMechanicRewardType === 'percentage'
-                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (empCo!.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
-                            : (empCo!.coMechanicEarning ?? '');
-                          setCoMechanicId(coId);
-                          setCoMechanicEarning(earning);
-                          setShowCoMechanic(true);
-                        } else {
-                          setShowCoMechanic(false);
-                          setCoMechanicId('');
-                          setCoMechanicEarning('');
-                        }
+                        setHelperRows(defaultHelperRows(t, selectedMechanicId, helperRows));
                       }}
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
                         {serviceConfigs.map(cfg => <option key={cfg.id} value={cfg.id}>{cfg.name}</option>)}
@@ -450,19 +601,7 @@ export default function OrderDetailsView({
                     </div>
                     <div>
                       <label className="block text-[10px] text-slate-400 mb-0.5">ფასი (₾) *</label>
-                      <input type="number" value={servicePrice} onChange={e => {
-                        const newPrice = e.target.value;
-                        setServicePrice(newPrice);
-                        // Recalculate co-mechanic earning if percentage type
-                        if (showCoMechanic && coMechanicId) {
-                          const cfg = serviceConfigs.find(c => c.id === serviceType);
-                          const empCo = cfg?.employeeRewards?.[selectedMechanicId];
-                          if (empCo?.coMechanicRewardType === 'percentage' && empCo.coMechanicEarning != null) {
-                            const p = parseFloat(newPrice) || 0;
-                            setCoMechanicEarning(p > 0 ? +((p * empCo.coMechanicEarning) / 100).toFixed(2) : '');
-                          }
-                        }
-                      }}
+                      <input type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)}
                         placeholder="შეიყვანეთ ფასი"
                         className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono" />
                     </div>
@@ -473,6 +612,7 @@ export default function OrderDetailsView({
                     {(() => {
                       const conf = serviceConfigs.find(c => c.id === serviceType);
                       if (!conf) return <p>კონფიგურაცია არ არის მითითებული</p>;
+                      if (selectedMechanicId === ownerId) return <p>მფლობელი: <span className="text-emerald-400 font-bold">100%</span> (დამხმარეების წილის გამოკლებით)</p>;
                       const empR = conf.employeeRewards?.[selectedMechanicId];
                       const active = empR || conf;
                       if (active.rewardType === 'flat') {
@@ -490,62 +630,14 @@ export default function OrderDetailsView({
                     <select value={selectedMechanicId} onChange={e => {
                         const newMechId = e.target.value;
                         setSelectedMechanicId(newMechId);
-                        const cfg = serviceConfigs.find(c => c.id === serviceType);
-                        const empCo = cfg?.employeeRewards?.[newMechId];
-                        if (empCo?.coMechanicId) {
-                          const earning = empCo.coMechanicRewardType === 'percentage'
-                            ? Number(servicePrice) > 0 ? +((Number(servicePrice) * (empCo.coMechanicEarning ?? 0)) / 100).toFixed(2) : ''
-                            : (empCo.coMechanicEarning ?? '');
-                          setCoMechanicId(empCo.coMechanicId);
-                          setCoMechanicEarning(earning);
-                          setShowCoMechanic(true);
-                        } else {
-                          setShowCoMechanic(false);
-                          setCoMechanicId('');
-                          setCoMechanicEarning('');
-                        }
+                        setHelperRows(defaultHelperRows(serviceType, newMechId, helperRows));
                       }}
                       className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200">
                       {mechanicOptions.map(m => <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>)}
                     </select>
                   </div>
 
-                  {/* Co-executor (available for all service types) */}
-                  <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი (არჩევითი)</span>
-                      <button type="button"
-                        onClick={() => { setShowCoMechanic(!showCoMechanic); if (showCoMechanic) { setCoMechanicId(''); setCoMechanicEarning(''); } }}
-                        className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
-                        {showCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
-                      </button>
-                    </div>
-                    {showCoMechanic && (
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">შემსრულებელი</label>
-                          <select value={coMechanicId} onChange={e => setCoMechanicId(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
-                            <option value="">— აირჩიეთ —</option>
-                            {mechanicOptions.filter(m => m.id !== selectedMechanicId).map(m => (
-                              <option key={m.id} value={m.id}>{m.firstName} {m.lastName}</option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-slate-500 mb-0.5">
-                            დასარიცხი (₾)
-                            {serviceConfigs.find(c => c.id === serviceType)?.coMechanicRewardType === 'percentage' && (
-                              <span className="ml-1 text-cyan-400">({serviceConfigs.find(c => c.id === serviceType)?.coMechanicEarning}% კონფ.)</span>
-                            )}
-                          </label>
-                          <input type="number" value={coMechanicEarning} onChange={e => setCoMechanicEarning(e.target.value)}
-                            placeholder="0"
-                            className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
+                  {renderHelpersEditor(helperRows, setHelperRows, serviceType, selectedMechanicId, servicePrice)}
 
                   <div>
                     <label className="block text-[10px] text-slate-400 mb-0.5">მომსახურების აღწერა *</label>
@@ -572,8 +664,9 @@ export default function OrderDetailsView({
               <div className="space-y-3">
                 {draftServices.map(srv => {
                   const isEditingThis = editingSrvId === srv.id;
-                  const mechObj = allUsers.find(m => m.id === srv.mechanicId) || { firstName: 'უცნობი', lastName: '' };
-                  const coMechObj = srv.coMechanicId ? allUsers.find(m => m.id === srv.coMechanicId) : null;
+                  const shares = getServiceShares(srv, ownerId);
+                  const helperShares = shares.filter(x => !x.isMain);
+                  const ownerRest = srv.price - shares.filter(x => x.mechanicId !== ownerId).reduce((a, x) => a + x.earning, 0);
                   return (
                     <div key={srv.id} className="bg-slate-950 border border-slate-850 p-3.5 rounded-xl space-y-3">
                       {isEditingThis ? (
@@ -585,16 +678,7 @@ export default function OrderDetailsView({
                               <select value={editSrvType} onChange={e => {
                                 const t = e.target.value;
                                 setEditSrvType(t);
-                                const cfg = serviceConfigs.find(c => c.id === t);
-                                if (cfg?.coMechanicId) {
-                                  setEditSrvCoMechId(cfg.coMechanicId);
-                                  setEditSrvCoMechEarning(cfg.coMechanicEarning ?? '');
-                                  setShowEditCoMechanic(true);
-                                } else {
-                                  setShowEditCoMechanic(false);
-                                  setEditSrvCoMechId('');
-                                  setEditSrvCoMechEarning('');
-                                }
+                                setEditHelperRows(defaultHelperRows(t, editSrvMechId, editHelperRows));
                               }}
                                 className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
                                 {serviceConfigs.map(cfg => <option key={cfg.id} value={cfg.id}>{cfg.name}</option>)}
@@ -608,43 +692,13 @@ export default function OrderDetailsView({
                           </div>
                           <div>
                             <label className="block text-[10px] text-slate-500 mb-0.5">პირველი შემსრულებელი</label>
-                            <select value={editSrvMechId} onChange={e => setEditSrvMechId(e.target.value)}
+                            <select value={editSrvMechId} onChange={e => { setEditSrvMechId(e.target.value); setEditHelperRows(defaultHelperRows(editSrvType, e.target.value, editHelperRows)); }}
                               className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1 text-slate-200">
                               {mechanicOptions.map(u => <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>)}
                             </select>
                           </div>
 
-                          {/* Co-executor edit section (all service types) */}
-                          <div className="border border-slate-700/50 rounded-xl p-2.5 space-y-2 bg-slate-900/50">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase">მეორე შემსრულებელი</span>
-                              <button type="button"
-                                onClick={() => { setShowEditCoMechanic(!showEditCoMechanic); if (showEditCoMechanic) { setEditSrvCoMechId(''); setEditSrvCoMechEarning(''); } }}
-                                className={`flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-lg cursor-pointer transition-all ${showEditCoMechanic ? 'bg-rose-500/20 text-rose-400 border border-rose-500/20' : 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20'}`}>
-                                {showEditCoMechanic ? <><X className="w-3 h-3" /> გაუქმება</> : <><UserPlus className="w-3 h-3" /> დამატება</>}
-                              </button>
-                            </div>
-                            {showEditCoMechanic && (
-                              <div className="grid grid-cols-2 gap-2">
-                                <div>
-                                  <label className="block text-[10px] text-slate-500 mb-0.5">შემსრულებელი</label>
-                                  <select value={editSrvCoMechId} onChange={e => setEditSrvCoMechId(e.target.value)}
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
-                                    <option value="">— აირჩიეთ —</option>
-                                    {mechanicOptions.filter(u => u.id !== editSrvMechId).map(u => (
-                                      <option key={u.id} value={u.id}>{u.firstName} {u.lastName}</option>
-                                    ))}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] text-slate-500 mb-0.5">დასარიცხი (₾)</label>
-                                  <input type="number" value={editSrvCoMechEarning} onChange={e => setEditSrvCoMechEarning(e.target.value)}
-                                    placeholder="0"
-                                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200 font-mono" />
-                                </div>
-                              </div>
-                            )}
-                          </div>
+                          {renderHelpersEditor(editHelperRows, setEditHelperRows, editSrvType, editSrvMechId, editSrvPriceValue)}
 
                           <div>
                             <label className="block text-[10px] text-slate-500 mb-0.5">აღწერა</label>
@@ -666,27 +720,31 @@ export default function OrderDetailsView({
                                 <Wrench className="w-3 h-3" /> {getServiceLabel(srv.serviceType)}
                               </span>
                               <span className="text-[10px] text-slate-500">
-                                შემსრულებელი: <b className="text-slate-400">{mechObj.firstName} {(mechObj as any).lastName}</b>
+                                შემსრულებელი: <b className="text-slate-400">{userName(srv.mechanicId)}</b>
                               </span>
-                              {coMechObj && (
-                                <span className="text-[10px] text-slate-500">
-                                  + <b className="text-slate-400">{coMechObj.firstName} {coMechObj.lastName}</b>
+                              {helperShares.map(h => (
+                                <span key={h.mechanicId} className="text-[10px] text-slate-500">
+                                  + <b className="text-slate-400">{userName(h.mechanicId)}</b>
                                 </span>
-                              )}
+                              ))}
                             </div>
-                            <p className="text-xs text-slate-200 font-medium pl-0.5">{srv.description}</p>
-                            <div className="text-[10.5px] text-slate-400 flex flex-wrap items-center gap-2">
+                            <p className="text-xs text-slate-200 font-medium pl-0.5 break-words">{srv.description}</p>
+                            <div className="text-[10.5px] text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-1">
                               <span>ფასი: <b className="text-slate-100 font-mono">{srv.price} ₾</b></span>
-                              <span className="text-slate-600">|</span>
-                              <span>
-                                {mechObj.firstName}: <b className="text-cyan-400 font-mono">{srv.mechanicEarning} ₾</b>
-                              </span>
-                              {coMechObj && srv.coMechanicEarning !== undefined && (
-                                <>
+                              {shares.map((sh, idx) => (
+                                <React.Fragment key={`${sh.mechanicId}-${idx}`}>
                                   <span className="text-slate-600">|</span>
                                   <span>
-                                    {coMechObj.firstName}: <b className="text-cyan-400 font-mono">{srv.coMechanicEarning} ₾</b>
+                                    {allUsers.find(u => u.id === sh.mechanicId)?.firstName || 'უცნობი'}: <b className="text-cyan-400 font-mono">{sh.earning} ₾</b>{' '}
+                                    <span className="text-slate-500">({formatSharePct(sh.earning, srv.price)})</span>
                                   </span>
+                                </React.Fragment>
+                              ))}
+                              {srv.mechanicId !== ownerId && (
+                                <>
+                                  <span className="text-slate-600">|</span>
+                                  <span>ზვიადი: <b className="text-amber-400 font-mono">{Math.round(ownerRest * 100) / 100} ₾</b>{' '}
+                                    <span className="text-slate-500">({formatSharePct(ownerRest, srv.price)})</span></span>
                                 </>
                               )}
                             </div>
@@ -734,13 +792,7 @@ export default function OrderDetailsView({
         )}
         <button
           disabled={saving}
-          onClick={async () => {
-            if (saving) return;
-            setSaving(true); setSaveError('');
-            try { await onSaveTransaction(order.id, draftOrder, draftServices); }
-            catch (e: any) { setSaveError('შენახვა ვერ მოხერხდა. სცადეთ თავიდან.'); }
-            finally { setSaving(false); }
-          }}
+          onClick={handleManualSave}
           className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black rounded-2xl shadow-xl uppercase tracking-widest cursor-pointer active:scale-[0.98] hover:from-amber-400 hover:to-amber-500 transition-all flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           {saving

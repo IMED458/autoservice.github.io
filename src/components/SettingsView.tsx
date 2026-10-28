@@ -391,7 +391,7 @@ export default function SettingsView({
                                       </div>
                                     </div>
                                   ) : (
-                                    <button onClick={() => { setEmpCoMechEditKey(editKey); setEmpCoMechUserId(''); setEmpCoMechRewardType('flat'); setEmpCoMechEarning(''); }}
+                                    <button onClick={() => { setEmpCoMechEditKey(editKey); setEmpCoMechUserId(''); setEmpCoMechRewardType('percentage'); setEmpCoMechEarning(''); }}
                                       className="flex items-center gap-1 text-[10px] text-slate-600 hover:text-cyan-400 cursor-pointer transition-colors">
                                       <UserPlus className="w-2.5 h-2.5" /> მეორე შემსრულებელი
                                     </button>

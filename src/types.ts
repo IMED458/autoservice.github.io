@@ -25,6 +25,8 @@ export interface CarServiceOrder {
   status: OrderStatus;
   paymentStatus: PaymentStatus;
   paidTo?: string;
+  paidAt?: string;                  // ISO timestamp when payment was recorded — wages are accrued on this date
+  completedAt?: string;             // ISO timestamp when work was marked completed
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -63,7 +65,14 @@ export interface ServiceItem {
   mechanicEarning: number;
   coMechanicId?: string;
   coMechanicEarning?: number;
+  helpers?: ServiceHelper[];        // all additional executors (supersedes coMechanicId)
   createdAt: string;
+}
+
+export interface ServiceHelper {
+  mechanicId: string;
+  earning: number;
+  fixed?: boolean;                  // assigned from settings — mechanics cannot change it
 }
 
 export interface Product {
@@ -256,4 +265,128 @@ export function isAdminRole(role: Role): boolean {
 /** Returns true for roles that have OWNER-level business access. Only `owner` is the ownership role. */
 export function isOwnerLike(role: Role): boolean {
   return role === 'owner' || role === 'super_admin' || role === 'manager';
+}
+
+export const PAID_TO_OPTIONS = ['ზვიადი', 'გიორგი მენეჯერი'];
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+export function findOwnerId(users: Pick<User, 'id' | 'role' | 'username' | 'firstName'>[]): string | undefined {
+  return (users.find(u => u.role === 'owner') || users.find(isOwnerUser))?.id;
+}
+
+/** Second executor permanently assigned in settings for this service + main executor */
+export function getFixedCoMechanic(serviceType: string, mainId: string, configs: ServiceTypeConfig[]) {
+  const er = configs.find(c => c.id === serviceType)?.employeeRewards?.[mainId];
+  if (!er?.coMechanicId) return null;
+  return {
+    mechanicId: er.coMechanicId,
+    rewardType: (er.coMechanicRewardType || 'flat') as 'flat' | 'percentage',
+    value: er.coMechanicEarning ?? 0,
+  };
+}
+
+export function getFixedCoEarning(fixed: { rewardType: 'flat' | 'percentage'; value: number }, price: number): number {
+  return fixed.rewardType === 'percentage' ? round2((price * fixed.value) / 100) : fixed.value;
+}
+
+export interface HelperDraft {
+  mechanicId: string;
+  earning?: number | null; // null/undefined → automatic equal split
+  fixed?: boolean;
+}
+
+/**
+ * Distributes a service's worker pool:
+ * - fixed (settings) co-executor gets its configured amount on top of the main executor's share;
+ * - manually added executors split the main executor's share equally (or take an explicit amount out of it);
+ * - the owner as main executor keeps everything that is not paid to helpers.
+ * The owner's remaining share is never reduced by manually added helpers.
+ */
+export function buildServiceShares(params: {
+  serviceType: string;
+  price: number;
+  configs: ServiceTypeConfig[];
+  mainId: string;
+  ownerId?: string;
+  helpers: HelperDraft[];
+}): { mechanicEarning: number; helpers: ServiceHelper[]; error?: string } {
+  const { serviceType, price, configs, mainId, ownerId } = params;
+  const pool = calculateMechanicEarning(serviceType, price, configs, mainId);
+  const fixedCfg = getFixedCoMechanic(serviceType, mainId, configs);
+  const seen = new Set<string>([mainId]);
+  const valid = params.helpers.filter(h => h.mechanicId && !seen.has(h.mechanicId) && seen.add(h.mechanicId));
+
+  const fixed: ServiceHelper[] = valid
+    .filter(h => h.fixed && fixedCfg && h.mechanicId === fixedCfg.mechanicId)
+    .map(h => ({ mechanicId: h.mechanicId, earning: getFixedCoEarning(fixedCfg!, price), fixed: true }));
+  const manualDrafts = valid.filter(h => !(h.fixed && fixedCfg && h.mechanicId === fixedCfg.mechanicId));
+  const auto = round2(pool / (manualDrafts.length + 1));
+  const manual: ServiceHelper[] = manualDrafts.map(h => ({
+    mechanicId: h.mechanicId,
+    earning: h.earning != null && !Number.isNaN(h.earning) ? round2(h.earning) : auto,
+  }));
+  const manualSum = round2(manual.reduce((s, h) => s + h.earning, 0));
+  const helpers = [...fixed, ...manual];
+  const helpersSum = round2(helpers.reduce((s, h) => s + h.earning, 0));
+
+  if (ownerId && mainId === ownerId) {
+    if (helpersSum > price) return { mechanicEarning: 0, helpers, error: 'დამხმარეების თანხა აღემატება ფასს' };
+    return { mechanicEarning: round2(price - helpersSum), helpers };
+  }
+  if (manualSum > pool + 0.001) {
+    return { mechanicEarning: 0, helpers, error: `დამხმარეების თანხა (${manualSum} ₾) აღემატება შემსრულებლის წილს (${pool} ₾)` };
+  }
+  return { mechanicEarning: round2(pool - manualSum), helpers };
+}
+
+export function getServiceHelpers(srv: ServiceItem): ServiceHelper[] {
+  if (srv.helpers && srv.helpers.length > 0) return srv.helpers;
+  if (srv.coMechanicId) return [{ mechanicId: srv.coMechanicId, earning: srv.coMechanicEarning || 0 }];
+  return [];
+}
+
+/** Every executor's share of a service. The owner as main executor gets the whole price minus helpers. */
+export function getServiceShares(srv: ServiceItem, ownerId?: string): { mechanicId: string; earning: number; isMain: boolean }[] {
+  const helpers = getServiceHelpers(srv);
+  const helpersSum = helpers.reduce((s, h) => s + h.earning, 0);
+  const mainEarning = ownerId && srv.mechanicId === ownerId ? round2(Math.max(0, srv.price - helpersSum)) : srv.mechanicEarning;
+  return [
+    { mechanicId: srv.mechanicId, earning: mainEarning, isMain: true },
+    ...helpers.map(h => ({ mechanicId: h.mechanicId, earning: h.earning, isMain: false })),
+  ];
+}
+
+export function getUserServiceEarning(srv: ServiceItem, userId: string, ownerId?: string): number {
+  return round2(getServiceShares(srv, ownerId).filter(s => s.mechanicId === userId).reduce((sum, s) => sum + s.earning, 0));
+}
+
+export function isServiceParticipant(srv: ServiceItem, userId: string): boolean {
+  return srv.mechanicId === userId || getServiceHelpers(srv).some(h => h.mechanicId === userId);
+}
+
+/** Splits a service into: wages paid to non-owner workers, owner's earning as executor, owner's profit as owner */
+export function splitServiceMoney(srv: ServiceItem, ownerId?: string) {
+  const shares = getServiceShares(srv, ownerId);
+  const ownerExecutor = round2(shares.filter(s => ownerId && s.mechanicId === ownerId).reduce((a, s) => a + s.earning, 0));
+  const wages = round2(shares.filter(s => !ownerId || s.mechanicId !== ownerId).reduce((a, s) => a + s.earning, 0));
+  const ownerProfit = round2(srv.price - wages - ownerExecutor);
+  return { wages, ownerExecutor, ownerProfit, ownerTotal: round2(ownerExecutor + ownerProfit) };
+}
+
+export function formatSharePct(earning: number, price: number): string {
+  if (!price) return '';
+  const pct = (earning / price) * 100;
+  return `${Number.isInteger(pct) ? pct : pct.toFixed(1)}%`;
+}
+
+/** Wages accrue only once the order is paid, on the payment date (legacy paid orders fall back to the order date) */
+export function getPaidDate(order: Pick<CarServiceOrder, 'paymentStatus' | 'paidAt' | 'date'>): string | null {
+  if (order.paymentStatus !== 'paid') return null;
+  return (order.paidAt || order.date || '').slice(0, 10) || null;
+}
+
+export function getCompletedDate(order: Pick<CarServiceOrder, 'status' | 'completedAt' | 'updatedAt'>): string | null {
+  if (order.status !== 'completed') return null;
+  return (order.completedAt || order.updatedAt || '').slice(0, 10) || null;
 }

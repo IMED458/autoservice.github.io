@@ -1,5 +1,5 @@
 import { User, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic } from '../types';
-import { LayoutDashboard, History, Users, BarChart3, Wrench, ListTodo, ShoppingBag, Settings, CalendarCheck, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, History, Users, BarChart3, Wrench, ListTodo, ShoppingBag, Settings, CalendarCheck, TrendingUp, Hourglass } from 'lucide-react';
 
 interface BottomNavProps {
   currentTab: string;
@@ -21,12 +21,14 @@ export default function BottomNav({ currentTab, onChangeTab, currentUser }: Bott
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });
     if (isAssignableMechanic(currentUser)) tabs.push({ id: 'earnings', label: 'ჩემი', icon: TrendingUp });
+    tabs.push({ id: 'unpaid', label: 'გადაუხდელი', icon: Hourglass });
     if (isOwnerLike(role) || role === 'admin') {
       tabs.push({ id: 'settings', label: 'პარამეტრი', icon: Settings });
     }
   } else {
     tabs.push({ id: 'all-orders', label: 'დავალებები', icon: ListTodo });
     tabs.push({ id: 'mechanic-dashboard', label: 'ჩემი გვერდი', icon: Wrench });
+    tabs.push({ id: 'unpaid', label: 'გადაუხდელი', icon: Hourglass });
     tabs.push({ id: 'history', label: 'ისტორია', icon: History });
     if (hasModule(currentUser, 'shop')) tabs.push({ id: 'shop', label: 'მაღაზია', icon: ShoppingBag });
     if (hasModule(currentUser, 'day_closing')) tabs.push({ id: 'day-closing', label: 'დახურვა', icon: CalendarCheck });

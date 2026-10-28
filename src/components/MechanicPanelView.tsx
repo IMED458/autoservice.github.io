@@ -1,14 +1,12 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState } from 'react';
-import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike, isAssignableMechanic } from '../types';
-import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users } from 'lucide-react';
+import {
+  CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike, isAssignableMechanic,
+  findOwnerId, getPaidDate, getServiceShares, getUserServiceEarning, isServiceParticipant, splitServiceMoney, formatSharePct,
+} from '../types';
+import { Calendar, DollarSign, Wrench, Briefcase, ArrowRight, Clock, TrendingUp, Wallet, Users, Sun } from 'lucide-react';
 import { motion } from 'motion/react';
-import { formatDateDDMMYYYY } from '../utils/date';
-import DateField from './DateField';
+import { formatDateDDMMYYYY, isDateInRange, shiftISODate, toISODateInputValue } from '../utils/date';
+import DayFilter from './DayFilter';
 
 interface MechanicPanelViewProps {
   orders: CarServiceOrder[];
@@ -19,8 +17,23 @@ interface MechanicPanelViewProps {
   onSelectOrder: (id: string) => void;
 }
 
+const r2 = (n: number) => Math.round(n * 100) / 100;
+
+function getPeriodRanges() {
+  const today = toISODateInputValue();
+  const now = new Date();
+  const dow = now.getDay();
+  const monday = shiftISODate(today, dow === 0 ? -6 : 1 - dow);
+  return {
+    today,
+    week: [monday, shiftISODate(monday, 6)] as [string, string],
+    month: [`${today.slice(0, 7)}-01`, `${today.slice(0, 7)}-31`] as [string, string],
+    year: [`${today.slice(0, 4)}-01-01`, `${today.slice(0, 4)}-12-31`] as [string, string],
+  };
+}
+
 // ──────────────────────────────────────────────
-// Owner (super_admin) profit view
+// Owner profit view (Zviadi + manager see Zviadi's money)
 // ──────────────────────────────────────────────
 function OwnerProfitView({
   orders,
@@ -32,85 +45,49 @@ function OwnerProfitView({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const parseLocalDate = (dateStr: string) => {
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return new Date(NaN);
-    const [year, month, day] = parts.map(Number);
-    return new Date(year, month - 1, day);
-  };
+  const ownerId = findOwnerId(allUsers);
+  const ownerUser = allUsers.find(u => u.id === ownerId);
+  const ownerName = ownerUser?.firstName || 'ზვიადი';
+  const orderById = new Map(orders.map(o => [o.id, o]));
+  const ranges = getPeriodRanges();
 
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth();
-  const currentDate = today.getDate();
-  const todayLocal = new Date(currentYear, currentMonth, currentDate);
-  const dayOfWeek = todayLocal.getDay();
-  const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const mondayLocal = new Date(todayLocal);
-  mondayLocal.setDate(todayLocal.getDate() + distanceToMonday);
-  const sundayLocal = new Date(mondayLocal);
-  sundayLocal.setDate(mondayLocal.getDate() + 6);
-  sundayLocal.setHours(23, 59, 59, 999);
+  // Only paid orders count, dated by the payment date
+  const servicesIn = (from: string, to: string) =>
+    services.filter(srv => {
+      const o = orderById.get(srv.orderId);
+      const paidDate = o ? getPaidDate(o) : null;
+      return !!paidDate && isDateInRange(paidDate, from, to);
+    });
 
-  const nonWorkerIds = new Set(allUsers.filter(u => !isAssignableMechanic(u)).map(u => u.id));
-
-  // Helper: compute revenue + wages for a set of services filtered by order dates
   const computeStats = (srvList: ServiceItem[]) => {
-    const paidServices = srvList.filter(x => orders.find(o => o.id === x.orderId)?.paymentStatus === 'paid');
-    const revenue = paidServices.reduce((s, x) => s + x.price, 0);
-    const wages = paidServices.reduce((s, x) => {
-      const mechWage = nonWorkerIds.has(x.mechanicId) ? 0 : x.mechanicEarning;
-      const coWage = (x.coMechanicId && nonWorkerIds.has(x.coMechanicId)) ? 0 : (x.coMechanicEarning || 0);
-      return s + mechWage + coWage;
-    }, 0);
-    return { revenue, wages, profit: revenue - wages };
+    const acc = { revenue: 0, unpaid: 0, wages: 0, executor: 0, ownerProfit: 0 };
+    srvList.forEach(srv => {
+      const m = splitServiceMoney(srv, ownerId);
+      acc.revenue += srv.price;
+      if (orderById.get(srv.orderId)?.paymentStatus !== 'paid') acc.unpaid += srv.price;
+      acc.wages += m.wages;
+      acc.executor += m.ownerExecutor;
+      acc.ownerProfit += m.ownerProfit;
+    });
+    return {
+      revenue: r2(acc.revenue), unpaid: r2(acc.unpaid), wages: r2(acc.wages),
+      executor: r2(acc.executor), ownerProfit: r2(acc.ownerProfit), total: r2(acc.executor + acc.ownerProfit),
+    };
   };
 
-  // Period computations
-  const weekServices = services.filter(srv => {
-    const o = orders.find(x => x.id === srv.orderId);
-    if (!o) return false;
-    const d = parseLocalDate(o.date);
-    return !isNaN(d.getTime()) && d >= mondayLocal && d <= sundayLocal;
-  });
+  const todayStats = computeStats(servicesIn(ranges.today, ranges.today));
+  const weekStats = computeStats(servicesIn(...ranges.week));
+  const monthStats = computeStats(servicesIn(...ranges.month));
+  const yearStats = computeStats(servicesIn(...ranges.year));
+  const allTimeStats = computeStats(servicesIn('', ''));
 
-  const monthServices = services.filter(srv => {
-    const o = orders.find(x => x.id === srv.orderId);
-    if (!o) return false;
-    const d = parseLocalDate(o.date);
-    return !isNaN(d.getTime()) && d.getFullYear() === currentYear && d.getMonth() === currentMonth;
-  });
-
-  const yearServices = services.filter(srv => {
-    const o = orders.find(x => x.id === srv.orderId);
-    if (!o) return false;
-    const d = parseLocalDate(o.date);
-    return !isNaN(d.getTime()) && d.getFullYear() === currentYear;
-  });
-
-  const allTimeStats = computeStats(services);
-  const weekStats = computeStats(weekServices);
-  const monthStats = computeStats(monthServices);
-  const yearStats = computeStats(yearServices);
-
-  // Custom date range
-  const filteredServices = services.filter(srv => {
-    if (!startDate && !endDate) return true;
-    const o = orders.find(x => x.id === srv.orderId);
-    if (!o) return false;
-    if (startDate && o.date < startDate) return false;
-    if (endDate && o.date > endDate) return false;
-    return true;
-  });
+  const filteredServices = servicesIn(startDate, endDate);
   const filteredStats = computeStats(filteredServices);
+  const hasFilter = !!(startDate || endDate);
 
-  // Per-employee wages (all time)
-  const employeeWages = allUsers.filter(isAssignableMechanic).map(u => {
-    const wages = services.reduce((sum, s) => {
-      if (s.mechanicId === u.id) return sum + s.mechanicEarning;
-      if (s.coMechanicId === u.id) return sum + (s.coMechanicEarning || 0);
-      return sum;
-    }, 0);
+  // Per-employee wages for the selected filter (non-owner workers)
+  const employeeWages = allUsers.filter(u => isAssignableMechanic(u) && u.id !== ownerId).map(u => {
+    const wages = r2(filteredServices.reduce((sum, s) => sum + getUserServiceEarning(s, u.id, ownerId), 0));
     return { user: u, wages };
   }).filter(e => e.wages > 0).sort((a, b) => b.wages - a.wages);
 
@@ -118,29 +95,41 @@ function OwnerProfitView({
     const conf = serviceConfigs.find(c => c.id === typeId);
     return conf ? conf.name : typeId;
   };
+  const userFirstName = (id: string) => allUsers.find(u => u.id === id)?.firstName || 'უცნობი';
+
+  const filteredOrders = orders
+    .filter(o => filteredServices.some(s => s.orderId === o.id))
+    .sort((a, b) => (getPaidDate(b) || '').localeCompare(getPaidDate(a) || '') || b.createdAt.localeCompare(a.createdAt));
 
   const StatCard = ({
-    label, revenue, wages, profit, color, icon,
+    label, stats, color, icon,
   }: {
-    label: string; revenue: number; wages: number; profit: number;
-    color: string; icon: React.ReactNode;
+    label: string; stats: ReturnType<typeof computeStats>; color: string; icon: React.ReactNode;
   }) => (
     <div className={`bg-slate-900 border ${color} rounded-2xl p-4 shadow-md relative overflow-hidden`}>
       <div className="absolute right-2 bottom-1 opacity-[0.07]">{icon}</div>
       <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block mb-2">{label}</span>
       <div className="space-y-1 text-xs">
-        <div className="flex justify-between">
-          <span className="text-slate-400">შემოსავალი</span>
-          <span className="font-mono font-bold text-slate-100">{revenue.toLocaleString()} ₾</span>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">გადახდილი ბრუნვა</span>
+          <span className="font-mono font-bold text-slate-100">{stats.revenue.toLocaleString()} ₾</span>
         </div>
-        <div className="flex justify-between">
-          <span className="text-slate-400">ხელფასები</span>
-          <span className="font-mono font-bold text-rose-400">−{wages.toLocaleString()} ₾</span>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">ხელოსნების ხელფასები</span>
+          <span className="font-mono font-bold text-rose-400">−{stats.wages.toLocaleString()} ₾</span>
         </div>
-        <div className="flex justify-between pt-1 border-t border-slate-800/60 mt-1">
-          <span className="text-slate-300 font-semibold">სუფთა მოგება</span>
-          <span className={`font-mono font-black text-base ${profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-            {profit >= 0 ? '' : '−'}{Math.abs(profit).toLocaleString()} ₾
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">შემსრულებლად</span>
+          <span className="font-mono font-bold text-cyan-400">{stats.executor.toLocaleString()} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">მფლობელის წილი</span>
+          <span className="font-mono font-bold text-amber-400">{stats.ownerProfit.toLocaleString()} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2 pt-1 border-t border-slate-800/60 mt-1">
+          <span className="text-slate-300 font-semibold">ჯამური მოგება</span>
+          <span className={`font-mono font-black text-base ${stats.total >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+            {stats.total.toLocaleString()} ₾
           </span>
         </div>
       </div>
@@ -152,11 +141,12 @@ function OwnerProfitView({
       {/* Owner banner */}
       <div className="bg-gradient-to-r from-amber-600 to-amber-800 rounded-2xl p-5 mb-5 shadow-lg relative overflow-hidden">
         <div className="relative z-10">
-          <span className="text-xs uppercase tracking-widest font-black text-amber-200">მფლობელის პანელი</span>
-          <h2 className="text-xl font-black font-sans mt-0.5">ფინანსური მიმოხილვა</h2>
+          <span className="text-xs uppercase tracking-widest font-black text-amber-200">ჩემი — მფლობელის პანელი</span>
+          <h2 className="text-xl font-black font-sans mt-0.5">{ownerName}ს ჯამური მოგება</h2>
           <p className="text-[11px] text-amber-100/90 mt-1 font-sans">
-            შემოსავალი, ხელოსნების ხელფასი და თქვენი სუფთა მოგება.
+            საკუთარ სამუშაოებში გამომუშავებული + სხვების სამუშაოებიდან დარიცხული მფლობელის წილი. ითვლება მხოლოდ გადახდილი ავტომობილები, გადახდის თარიღით.
           </p>
+          <div className="mt-3 text-3xl font-black font-mono">{allTimeStats.total.toLocaleString()} ₾</div>
         </div>
         <div className="absolute right-0 bottom-0 top-0 opacity-10 flex items-center justify-center">
           <Wallet className="w-40 h-40 rotate-[15deg] translate-x-10 translate-y-10" />
@@ -168,74 +158,88 @@ function OwnerProfitView({
         პერიოდების მიხედვით
       </h3>
       <div className="grid grid-cols-1 gap-3 mb-5 sm:grid-cols-2">
-        <StatCard label="ამ კვირა" {...weekStats} color="border-cyan-500/20" icon={<Calendar className="w-16 h-16" />} />
-        <StatCard label="ამ თვე" {...monthStats} color="border-emerald-500/20" icon={<Briefcase className="w-16 h-16" />} />
-        <StatCard label="ამ წელი" {...yearStats} color="border-amber-500/20" icon={<TrendingUp className="w-16 h-16" />} />
-        <StatCard label="სულ ყველა დრო" {...allTimeStats} color="border-indigo-500/20" icon={<DollarSign className="w-16 h-16" />} />
+        <StatCard label="დღეს" stats={todayStats} color="border-rose-500/20" icon={<Sun className="w-16 h-16" />} />
+        <StatCard label="ამ კვირა" stats={weekStats} color="border-cyan-500/20" icon={<Calendar className="w-16 h-16" />} />
+        <StatCard label="ამ თვე" stats={monthStats} color="border-emerald-500/20" icon={<Briefcase className="w-16 h-16" />} />
+        <StatCard label="ამ წელი" stats={yearStats} color="border-amber-500/20" icon={<TrendingUp className="w-16 h-16" />} />
+        <StatCard label="სულ ყველა დრო" stats={allTimeStats} color="border-indigo-500/20" icon={<DollarSign className="w-16 h-16" />} />
       </div>
 
-      {/* Custom date range */}
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-5 shadow-sm space-y-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
-          <Calendar className="w-3.5 h-3.5 text-amber-400" />
-          თარიღის ფილტრი
-        </h3>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-დან</label>
-            <DateField value={startDate} onChange={setStartDate}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 text-slate-200" />
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-მდე</label>
-            <DateField value={endDate} onChange={setEndDate}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-amber-500 text-slate-200" />
-          </div>
-        </div>
-        {(startDate || endDate) && (
-          <div className="bg-slate-950 border border-slate-800 p-3 rounded-lg space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-400">შემოსავალი</span>
-              <span className="font-mono font-bold text-slate-100">{filteredStats.revenue.toLocaleString()} ₾</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-slate-400">ხელფასები</span>
-              <span className="font-mono font-bold text-rose-400">−{filteredStats.wages.toLocaleString()} ₾</span>
-            </div>
-            <div className="flex justify-between text-xs pt-1 border-t border-slate-800/60">
-              <span className="text-slate-200 font-semibold">სუფთა მოგება</span>
-              <span className={`font-mono font-black ${filteredStats.profit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {filteredStats.profit >= 0 ? '' : '−'}{Math.abs(filteredStats.profit).toLocaleString()} ₾
-              </span>
-            </div>
-            <button onClick={() => { setStartDate(''); setEndDate(''); }}
-              className="w-full mt-1 text-[10px] font-bold text-rose-400 py-1 bg-slate-900 border border-slate-800 rounded-lg cursor-pointer">
-              ფილტრის მოხსნა
-            </button>
-          </div>
-        )}
+      {/* Day / range filter */}
+      <div className="mb-3">
+        <DayFilter from={startDate} to={endDate} onChange={(f, t) => { setStartDate(f); setEndDate(t); }} title="დღის / თარიღის ფილტრი" />
       </div>
+      {hasFilter && (
+        <div className="mb-5">
+          <StatCard label={`არჩეული: ${formatDateDDMMYYYY(startDate) || '...'} — ${formatDateDDMMYYYY(endDate) || '...'}`} stats={filteredStats}
+            color="border-amber-500/40" icon={<Calendar className="w-16 h-16" />} />
+        </div>
+      )}
 
       {/* Per-employee wages */}
-      {employeeWages.length > 0 && (
-        <>
-          <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5" /> თანამშრომლების ხელფასი (სულ)
-          </h3>
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 space-y-2.5">
-            {employeeWages.map(({ user, wages }) => (
-              <div key={user.id} className="flex items-center justify-between py-1 border-b border-slate-800/40 last:border-0">
-                <span className="text-sm text-slate-300 font-semibold">{user.firstName} {user.lastName}</span>
-                <span className="font-mono font-bold text-rose-400">{wages.toLocaleString()} ₾</span>
-              </div>
-            ))}
-            <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
-              <span className="text-xs text-slate-400 font-bold uppercase">სულ ხელფასები</span>
-              <span className="font-mono font-black text-rose-400 text-sm">{allTimeStats.wages.toLocaleString()} ₾</span>
-            </div>
+      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5 flex items-center gap-1.5">
+        <Users className="w-3.5 h-3.5" /> თანამშრომლების ხელფასი ({hasFilter ? 'არჩეული პერიოდი' : 'სულ'})
+      </h3>
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 mb-5 space-y-2.5">
+        {employeeWages.length === 0 && <p className="text-xs text-slate-600 text-center">ხელფასები არ ფიქსირდება</p>}
+        {employeeWages.map(({ user, wages }) => (
+          <div key={user.id} className="flex items-center justify-between py-1 border-b border-slate-800/40 last:border-0 gap-2">
+            <span className="text-sm text-slate-300 font-semibold">{user.firstName} {user.lastName}</span>
+            <span className="font-mono font-bold text-rose-400">{wages.toLocaleString()} ₾</span>
           </div>
-        </>
-      )}
+        ))}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-700/60">
+          <span className="text-xs text-slate-400 font-bold uppercase">სულ ხელფასები</span>
+          <span className="font-mono font-black text-rose-400 text-sm">{filteredStats.wages.toLocaleString()} ₾</span>
+        </div>
+      </div>
+
+      {/* Breakdown per order / service */}
+      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5">
+        სად რა გამოიმუშავა {ownerName} ({filteredOrders.length})
+      </h3>
+      <div className="space-y-3">
+        {filteredOrders.length === 0 && (
+          <div className="p-6 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800 text-xs">ჩანაწერები არ არის</div>
+        )}
+        {filteredOrders.map(order => {
+          const srvs = filteredServices.filter(s => s.orderId === order.id);
+          const orderOwnerTotal = r2(srvs.reduce((a, s) => a + splitServiceMoney(s, ownerId).ownerTotal, 0));
+          return (
+            <div key={order.id} onClick={() => onSelectOrder(order.id)}
+              className="bg-slate-900 border border-slate-800/80 p-3.5 rounded-xl shadow hover:border-slate-700 cursor-pointer">
+              <div className="flex justify-between items-start gap-2 border-b border-slate-800/60 pb-2 mb-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] text-slate-500 block font-mono">გადახდა: {formatDateDDMMYYYY(getPaidDate(order) || '')}</span>
+                  <h4 className="text-sm font-black text-slate-200 uppercase truncate">{order.carBrand} <span className="font-mono text-slate-400">{order.carNumber}</span></h4>
+                </div>
+                <span className="text-emerald-400 font-mono font-black text-sm whitespace-nowrap">+{orderOwnerTotal} ₾</span>
+              </div>
+              <div className="space-y-1.5">
+                {srvs.map(srv => {
+                  const m = splitServiceMoney(srv, ownerId);
+                  const workers = getServiceShares(srv, ownerId).filter(x => x.mechanicId !== ownerId);
+                  return (
+                    <div key={srv.id} className="text-[11px] text-slate-300 bg-slate-950/70 border border-slate-800/60 rounded-lg p-2">
+                      <div className="flex justify-between gap-2">
+                        <span className="min-w-0 break-words">• {getServiceLabel(srv.serviceType)} — {srv.description}</span>
+                        <span className="font-mono text-slate-100 whitespace-nowrap">{srv.price} ₾</span>
+                      </div>
+                      <div className="flex flex-wrap gap-x-2 gap-y-0.5 text-[10px] text-slate-400 mt-0.5">
+                        {workers.map((w, i) => (
+                          <span key={i}>{userFirstName(w.mechanicId)}: <b className="text-rose-300 font-mono">{w.earning} ₾</b> ({formatSharePct(w.earning, srv.price)})</span>
+                        ))}
+                        {m.ownerExecutor > 0 && <span>{ownerName} შემსრ.: <b className="text-cyan-400 font-mono">{m.ownerExecutor} ₾</b> ({formatSharePct(m.ownerExecutor, srv.price)})</span>}
+                        {m.ownerProfit !== 0 && <span>{ownerName} მფლობ.: <b className="text-amber-400 font-mono">{m.ownerProfit} ₾</b> ({formatSharePct(m.ownerProfit, srv.price)})</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -253,57 +257,35 @@ function EmployeeEarningsView({
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
 
-  const mechanicServices = services.filter(s =>
-    s.mechanicId === currentUser.id || s.coMechanicId === currentUser.id
-  );
+  const mechanicServices = services.filter(s => isServiceParticipant(s, currentUser.id));
 
-  const getEarning = (s: typeof services[0]) =>
-    s.mechanicId === currentUser.id ? s.mechanicEarning : (s.coMechanicEarning || 0);
+  const getEarning = (s: typeof services[0]) => getUserServiceEarning(s, currentUser.id);
 
-  const parseLocalDate = (dateStr: string) => {
-    const parts = dateStr.split('-');
-    if (parts.length !== 3) return new Date(NaN);
-    const [year, month, day] = parts.map(Number);
-    return new Date(year, month - 1, day);
-  };
-
-  const today = new Date();
-  const currentYear = today.getFullYear();
-  const currentMonth = today.getMonth();
-  const currentDate = today.getDate();
-  const todayLocal = new Date(currentYear, currentMonth, currentDate);
-  const dayOfWeek = todayLocal.getDay();
-  const distanceToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-  const mondayLocal = new Date(todayLocal);
-  mondayLocal.setDate(todayLocal.getDate() + distanceToMonday);
-  const sundayLocal = new Date(mondayLocal);
-  sundayLocal.setDate(mondayLocal.getDate() + 6);
-  sundayLocal.setHours(23, 59, 59, 999);
-
-  let weekEarnings = 0;
-  let monthEarnings = 0;
-  let yearEarnings = 0;
-  const totalLifetimeEarnings = mechanicServices.reduce((sum, s) => sum + getEarning(s), 0);
-
-  mechanicServices.forEach(srv => {
+  const ranges = getPeriodRanges();
+  // Wages accrue only after payment, on the payment date
+  const paidDateOf = (srv: ServiceItem) => {
     const orderObj = orders.find(o => o.id === srv.orderId);
-    if (!orderObj) return;
-    const orderDate = parseLocalDate(orderObj.date);
-    if (isNaN(orderDate.getTime())) return;
-    if (orderDate >= mondayLocal && orderDate <= sundayLocal) weekEarnings += getEarning(srv);
-    if (orderDate.getFullYear() === currentYear && orderDate.getMonth() === currentMonth) monthEarnings += getEarning(srv);
-    if (orderDate.getFullYear() === currentYear) yearEarnings += getEarning(srv);
-  });
+    return orderObj ? getPaidDate(orderObj) : null;
+  };
+  const sumIn = (from: string, to: string) => r2(mechanicServices.reduce((sum, srv) => {
+    const paidDate = paidDateOf(srv);
+    return paidDate && isDateInRange(paidDate, from, to) ? sum + getEarning(srv) : sum;
+  }, 0));
+  const expectedServices = mechanicServices.filter(srv => !paidDateOf(srv) && orders.some(o => o.id === srv.orderId));
+  const expectedEarnings = r2(expectedServices.reduce((sum, s) => sum + getEarning(s), 0));
+  const expectedCars = new Set(expectedServices.map(s => s.orderId)).size;
+  const todayEarnings = sumIn(ranges.today, ranges.today);
+  const weekEarnings = sumIn(...ranges.week);
+  const monthEarnings = sumIn(...ranges.month);
+  const yearEarnings = sumIn(...ranges.year);
+  const totalLifetimeEarnings = sumIn('', '');
 
   const filteredServices = mechanicServices.filter(srv => {
-    const orderObj = orders.find(o => o.id === srv.orderId);
-    if (!orderObj) return false;
-    if (startDate && orderObj.date < startDate) return false;
-    if (endDate && orderObj.date > endDate) return false;
-    return true;
+    const paidDate = paidDateOf(srv);
+    return !!paidDate && isDateInRange(paidDate, startDate, endDate);
   });
 
-  const filteredEarningsSum = filteredServices.reduce((sum, s) => sum + getEarning(s), 0);
+  const filteredEarningsSum = r2(filteredServices.reduce((sum, s) => sum + getEarning(s), 0));
 
   const getServiceLabel = (typeId: string) => {
     const conf = serviceConfigs.find(c => c.id === typeId);
@@ -323,7 +305,7 @@ function EmployeeEarningsView({
             გამარჯობა, {currentUser.firstName} {currentUser.lastName}!
           </h2>
           <p className="text-[11px] text-cyan-100/90 mt-1 font-sans">
-            აქ ნახავთ თქვენს მიერ შესრულებულ სამუშაოებს და გამომუშავებულ წილს.
+            აქ ნახავთ თქვენს მიერ შესრულებულ სამუშაოებს და დარიცხულ წილს (მხოლოდ გადახდილი ავტომობილები, გადახდის თარიღით).
           </p>
         </div>
         <div className="absolute right-0 bottom-0 top-0 opacity-10 flex items-center justify-center">
@@ -336,6 +318,17 @@ function EmployeeEarningsView({
       </h3>
 
       <div className="grid grid-cols-2 gap-3 mb-5">
+        <div className="col-span-2 bg-slate-900 border border-amber-500/30 p-3.5 rounded-xl shadow">
+          <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider block">მოსალოდნელი (გადაუხდელი) ხელფასი</span>
+          <div className="text-xl font-black font-mono mt-1 text-amber-400">{expectedEarnings.toLocaleString()} ₾</div>
+          <p className="text-[9px] text-slate-500 mt-0.5 font-sans">{expectedCars} გადაუხდელი ავტომობილიდან — დაგერიცხებათ გადახდისთანავე</p>
+        </div>
+        <div className="col-span-2 bg-slate-900 border border-rose-500/20 p-3.5 rounded-xl shadow relative overflow-hidden">
+          <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">დღევანდელი ნამუშევარი</span>
+          <div className="text-xl font-black font-mono mt-1 text-rose-300">{todayEarnings.toLocaleString()} ₾</div>
+          <p className="text-[9px] text-slate-500 mt-0.5 font-sans">{formatDateDDMMYYYY(ranges.today)}</p>
+          <div className="absolute right-2 bottom-1 text-rose-500/10"><Sun className="w-10 h-10 -mr-2 -mb-2" /></div>
+        </div>
         <div className="bg-slate-900 border border-slate-800 p-3.5 rounded-xl shadow relative overflow-hidden">
           <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">კვირის ნამუშევარი</span>
           <div className="text-xl font-black font-mono mt-1 text-cyan-400">{weekEarnings.toLocaleString()} ₾</div>
@@ -362,33 +355,12 @@ function EmployeeEarningsView({
         </div>
       </div>
 
-      <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 mb-5 shadow-sm space-y-3">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5 border-b border-slate-800/60 pb-1.5">
-          <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-          გამომუშავების ფილტრი თარიღებით
-        </h3>
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div>
-            <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-დან (თარიღი)</label>
-            <DateField value={startDate} onChange={setStartDate}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500 text-slate-200" />
-          </div>
-          <div>
-            <label className="block text-[10px] text-slate-500 mb-0.5 uppercase font-semibold">-მდე (თარიღი)</label>
-            <DateField value={endDate} onChange={setEndDate}
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 focus:outline-none focus:border-cyan-500 text-slate-200" />
-          </div>
-        </div>
+      <div className="mb-5 space-y-2">
+        <DayFilter from={startDate} to={endDate} onChange={(f, t) => { setStartDate(f); setEndDate(t); }} accent="cyan" title="გამომუშავების ფილტრი დღის / თარიღის მიხედვით" />
         {(startDate || endDate) && (
-          <div className="bg-slate-950 border border-slate-850 p-3 rounded-lg flex items-center justify-between text-xs font-sans">
-            <div>
-              <span className="text-[9px] text-slate-500 uppercase font-black block leading-none mb-0.5">გაფილტრული წილი:</span>
-              <span className="font-mono text-emerald-400 font-extrabold text-sm">{filteredEarningsSum.toLocaleString()} ₾</span>
-            </div>
-            <button onClick={() => { setStartDate(''); setEndDate(''); }}
-              className="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 text-[10px] font-bold text-rose-400 rounded-lg cursor-pointer transition-colors border border-slate-800/80">
-              ფილტრის მოხსნა
-            </button>
+          <div className="bg-slate-900 border border-cyan-500/30 p-3 rounded-lg flex items-center justify-between text-xs font-sans">
+            <span className="text-[10px] text-slate-400 uppercase font-black">გაფილტრული წილი:</span>
+            <span className="font-mono text-emerald-400 font-extrabold text-sm">{filteredEarningsSum.toLocaleString()} ₾</span>
           </div>
         )}
       </div>
@@ -427,7 +399,7 @@ function EmployeeEarningsView({
                   {myOrderServices.map(srv => (
                     <div key={srv.id} className="text-[11px] text-slate-300 flex justify-between gap-2">
                       <span>• {getServiceLabel(srv.serviceType)} — {srv.description}</span>
-                      <span className="text-cyan-400 font-mono font-bold">+{getEarning(srv)} ₾</span>
+                      <span className="text-cyan-400 font-mono font-bold whitespace-nowrap">+{getEarning(srv)} ₾ <span className="text-slate-500 font-normal">({formatSharePct(getEarning(srv), srv.price)})</span></span>
                     </div>
                   ))}
                 </div>

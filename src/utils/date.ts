@@ -49,3 +49,18 @@ export function parseDDMMYYYYToISO(value: string): string | null {
 
   return `${year}-${month}-${day}`;
 }
+
+export function shiftISODate(isoDate: string, days: number): string {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  return toISODateInputValue(new Date(y, m - 1, d + days));
+}
+
+/** Inclusive check on yyyy-mm-dd strings; empty bounds are open */
+export function isDateInRange(isoDate: string | undefined, from: string, to: string): boolean {
+  if (!from && !to) return true;
+  if (!isoDate) return false;
+  const d = isoDate.slice(0, 10);
+  if (from && d < from) return false;
+  if (to && d > to) return false;
+  return true;
+}

@@ -10,6 +10,12 @@ import {
   ServiceItem,
   ORDER_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
+  PAID_TO_OPTIONS,
+  findOwnerId,
+  getPaidDate,
+  getUserServiceEarning,
+  isServiceParticipant,
+  splitServiceMoney,
 } from '../types';
 import {
   BarChart3,
@@ -25,7 +31,8 @@ import {
   ArrowRight,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
+import { formatDateDDMMYYYY, toISODateInputValue, shiftISODate, isDateInRange } from '../utils/date';
+import DayFilter from './DayFilter';
 
 interface ReportsViewProps {
   orders: CarServiceOrder[];
@@ -34,42 +41,38 @@ interface ReportsViewProps {
   allUsers: User[];
 }
 
-type PeriodType = 'week' | 'month' | 'year' | 'all';
+type PeriodType = 'day' | 'week' | 'month' | 'year' | 'all';
+
+const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export default function ReportsView({ orders, services, mechanics, allUsers }: ReportsViewProps) {
-  const [activePeriod, setActivePeriod] = useState<PeriodType>('all');
+  const today = toISODateInputValue();
+  const periodRange = (p: PeriodType): [string, string] =>
+    p === 'day' ? [today, today]
+      : p === 'week' ? [shiftISODate(today, -6), today]
+      : p === 'month' ? [shiftISODate(today, -29), today]
+      : p === 'year' ? [shiftISODate(today, -364), today]
+      : ['', ''];
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const activePeriod = (['day', 'week', 'month', 'year', 'all'] as PeriodType[])
+    .find(p => { const [f, t] = periodRange(p); return f === dateFrom && t === dateTo; });
+  const setActivePeriod = (p: PeriodType) => { const [f, t] = periodRange(p); setDateFrom(f); setDateTo(t); };
 
-  // Helper date calculators
-  const filterOrdersByPeriod = (orderList: CarServiceOrder[], period: PeriodType) => {
-    const now = new Date();
-    
-    // Set hours to zero for accurate day calculations
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    return orderList.filter((order) => {
-      const orderDate = new Date(order.date);
-      if (isNaN(orderDate.getTime())) return true; // Fallback for invalid dates
-      
-      const diffTime = today.getTime() - orderDate.getTime();
-      const diffDays = diffTime / (1000 * 60 * 60 * 24);
-
-      if (period === 'week') {
-        return diffDays <= 7;
-      }
-      if (period === 'month') {
-        return diffDays <= 30;
-      }
-      if (period === 'year') {
-        return diffDays <= 365;
-      }
-      return true; // 'all'
-    });
-  };
+  const ownerId = findOwnerId(allUsers);
+  const ownerUser = allUsers.find(u => u.id === ownerId);
 
   // Filtered orders & services for current active period calculation
-  const periodOrders = filterOrdersByPeriod(orders, activePeriod);
+  const periodOrders = orders.filter(o => isDateInRange(o.date, dateFrom, dateTo));
   const periodOrderIds = new Set(periodOrders.map((o) => o.id));
   const periodServices = services.filter((srv) => periodOrderIds.has(srv.orderId));
+
+  // Wages / owner share accrue only for paid orders, on the payment date
+  const paidInPeriodIds = new Set(orders.filter(o => {
+    const paidDate = getPaidDate(o);
+    return !!paidDate && isDateInRange(paidDate, dateFrom, dateTo);
+  }).map(o => o.id));
+  const paidServices = services.filter(srv => paidInPeriodIds.has(srv.orderId));
 
   const totalCompletedOrders = periodOrders.filter((o) => o.status === 'completed').length;
 
@@ -111,20 +114,29 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
   }
 
   const mechanicPerformances: MechanicPerformance[] = mechanics.map((mech) => {
-    const mySrvs = periodServices.filter((s) => s.mechanicId === mech.id || s.coMechanicId === mech.id);
+    const mySrvs = paidServices.filter((s) => isServiceParticipant(s, mech.id));
     const totalWorksCost = mySrvs.filter(s => s.mechanicId === mech.id).reduce((sum, s) => sum + s.price, 0);
-    const totalEarned = mySrvs.reduce((sum, s) =>
-      sum + (s.mechanicId === mech.id ? s.mechanicEarning : (s.coMechanicEarning || 0)), 0);
+    const totalEarned = r2(mySrvs.reduce((sum, s) => sum + getUserServiceEarning(s, mech.id, ownerId), 0));
 
     return {
       id: mech.id,
-      fullName: `${mech.firstName} ${mech.lastName}`,
+      fullName: `${mech.firstName} ${mech.lastName}`.trim(),
       username: mech.username,
       totalWorksCost,
       totalEarned,
       tasksCount: mySrvs.length,
     };
-  });
+  }).sort((a, b) => b.totalEarned - a.totalEarned);
+
+  // Owner (Zviadi): as executor + as owner of everyone else's work
+  const ownerTotals = paidServices.reduce((acc, srv) => {
+    const m = splitServiceMoney(srv, ownerId);
+    acc.wages += m.wages;
+    acc.executor += m.ownerExecutor;
+    acc.ownerProfit += m.ownerProfit;
+    if (srv.mechanicId === ownerId) acc.ownTurnover += srv.price;
+    return acc;
+  }, { wages: 0, executor: 0, ownerProfit: 0, ownTurnover: 0 });
 
   // Calculate cash collectors while keeping the owner profit assigned to Zviadi.
   interface PaidToShare {
@@ -136,40 +148,23 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
 
   const ownerName = 'ზვიადი';
   const paidToSharesRecords: Record<string, PaidToShare> = {};
-  paidToSharesRecords[ownerName] = { name: ownerName, totalReceived: 0, ownerProfitShare: 0, handymanPaidOut: 0 };
-  allUsers.forEach((u) => {
-    if (u.username.toLowerCase() !== 'imedo' && u.role !== 'accountant' && u.firstName !== ownerName) {
-      const displayName = `${u.firstName} ${u.lastName}`.trim();
-      paidToSharesRecords[displayName] = { name: displayName, totalReceived: 0, ownerProfitShare: 0, handymanPaidOut: 0 };
-    }
+  PAID_TO_OPTIONS.forEach(name => {
+    paidToSharesRecords[name] = { name, totalReceived: 0, ownerProfitShare: 0, handymanPaidOut: 0 };
   });
 
-  periodOrders.forEach((order) => {
-    if (order.paymentStatus !== 'paid') return;
-    const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
-    const paidToName = order.paidTo || ownerName;
-
-    if (!paidToSharesRecords[paidToName]) {
-      paidToSharesRecords[paidToName] = {
-        name: paidToName,
-        totalReceived: 0,
-        ownerProfitShare: 0,
-        handymanPaidOut: 0,
-      };
-    }
+  orders.filter(o => paidInPeriodIds.has(o.id)).forEach((order) => {
+    const orderSrvList = paidServices.filter((s) => s.orderId === order.id);
+    const paidToName = order.paidTo && PAID_TO_OPTIONS.includes(order.paidTo) ? order.paidTo : ownerName;
 
     orderSrvList.forEach((srv) => {
-      paidToSharesRecords[paidToName].totalReceived += srv.price;
-      const totalMechPay = srv.mechanicEarning + (srv.coMechanicEarning || 0);
-      const ownerProfit = srv.price - totalMechPay;
-      paidToSharesRecords[paidToName].ownerProfitShare += ownerProfit;
-      paidToSharesRecords[paidToName].handymanPaidOut += totalMechPay;
+      const m = splitServiceMoney(srv, ownerId);
+      paidToSharesRecords[paidToName].totalReceived = r2(paidToSharesRecords[paidToName].totalReceived + srv.price);
+      paidToSharesRecords[paidToName].ownerProfitShare = r2(paidToSharesRecords[paidToName].ownerProfitShare + m.ownerTotal);
+      paidToSharesRecords[paidToName].handymanPaidOut = r2(paidToSharesRecords[paidToName].handymanPaidOut + m.wages);
     });
   });
 
-  const activePaidToShares = Object.values(paidToSharesRecords).filter(
-    (item) => item.name === ownerName || item.totalReceived > 0
-  );
+  const activePaidToShares = Object.values(paidToSharesRecords);
 
   // Dynamic label for categories
   const getCategoryLabel = (typeId: string) => {
@@ -190,6 +185,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
       'მომსახურების რაოდენობა',
       'ჯამური ფასი (Total Cost)',
       'ხელოსნის გამომუშავება',
+      'ზვიადის წილი',
       'გადახდილია ვისთან (Paid To)',
       'სამუშაო სტატუსი',
       'გადახდა',
@@ -198,7 +194,8 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     const rows = periodOrders.map((order) => {
       const orderSrvList = periodServices.filter((s) => s.orderId === order.id);
       const totalCost = orderSrvList.reduce((sum, s) => sum + s.price, 0);
-      const totalEarn = orderSrvList.reduce((sum, s) => sum + s.mechanicEarning + (s.coMechanicEarning || 0), 0);
+      const totalEarn = r2(orderSrvList.reduce((sum, s) => sum + splitServiceMoney(s, ownerId).wages, 0));
+      const ownerEarn = r2(orderSrvList.reduce((sum, s) => sum + splitServiceMoney(s, ownerId).ownerTotal, 0));
 
       return [
         formatDateDDMMYYYY(order.date),
@@ -209,6 +206,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
         orderSrvList.length,
         totalCost,
         totalEarn,
+        ownerEarn,
         order.paidTo || 'ზვიადი',
         ORDER_STATUS_LABELS[order.status],
         PAYMENT_STATUS_LABELS[order.paymentStatus],
@@ -223,7 +221,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `ავტოსერვისი_პერიოდული_ანგარიში_${activePeriod}_${formatDateDDMMYYYY(toISODateInputValue()).replace(/\//g, '.')}.csv`);
+    link.setAttribute('download', `ავტოსერვისი_ანგარიში_${dateFrom || 'start'}_${dateTo || 'end'}_${formatDateDDMMYYYY(toISODateInputValue()).replace(/\//g, '.')}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -251,8 +249,8 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
       </div>
 
       {/* Modern Horizontal Period Selector Buttons */}
-      <div className="grid grid-cols-4 gap-1.5 bg-slate-900 border border-slate-800 p-1 rounded-xl mb-5 text-center text-xs">
-        {(['week', 'month', 'year', 'all'] as PeriodType[]).map((p) => {
+      <div className="grid grid-cols-5 gap-1 bg-slate-900 border border-slate-800 p-1 rounded-xl mb-3 text-center text-xs">
+        {(['day', 'week', 'month', 'year', 'all'] as PeriodType[]).map((p) => {
           const isActive = activePeriod === p;
           return (
             <button
@@ -265,6 +263,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
                   : 'text-slate-400 hover:text-slate-200'
               }`}
             >
+              {p === 'day' && 'დღე'}
               {p === 'week' && 'კვირა'}
               {p === 'month' && 'თვე'}
               {p === 'year' && 'წელი'}
@@ -272,6 +271,10 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
             </button>
           );
         })}
+      </div>
+
+      <div className="mb-5">
+        <DayFilter from={dateFrom} to={dateTo} onChange={(f, t) => { setDateFrom(f); setDateTo(t); }} title="დღის / თარიღის ფილტრი" />
       </div>
 
       {/* Main Stats metrics Cards */}
@@ -335,6 +338,34 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
         })}
       </div>
 
+      {/* Zviadi: executor + owner */}
+      <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5">
+        {ownerUser?.firstName || ownerName} — შემსრულებლად და მფლობელად
+      </h3>
+      <div className="bg-slate-900 border border-amber-500/20 rounded-2xl p-4 mb-5 shadow space-y-2 text-xs">
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">საკუთარი სამუშაოების ბრუნვა:</span>
+          <span className="font-mono font-bold text-slate-100">{r2(ownerTotals.ownTurnover)} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">გამოიმუშავა შემსრულებლად:</span>
+          <span className="font-mono font-bold text-cyan-400">{r2(ownerTotals.executor)} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">მფლობელის წილი სხვების სამუშაოდან:</span>
+          <span className="font-mono font-bold text-amber-400">{r2(ownerTotals.ownerProfit)} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2">
+          <span className="text-slate-400">ხელოსნების ხელფასები:</span>
+          <span className="font-mono font-bold text-rose-400">{r2(ownerTotals.wages)} ₾</span>
+        </div>
+        <div className="flex justify-between gap-2 pt-2 border-t border-slate-800">
+          <span className="text-slate-200 font-bold">ჯამური მოგება:</span>
+          <span className="font-mono font-black text-emerald-400 text-sm">{r2(ownerTotals.executor + ownerTotals.ownerProfit)} ₾</span>
+        </div>
+        <p className="text-[10px] text-slate-500">გადახდილი ბრუნვა ({r2(paidServices.reduce((a, s) => a + s.price, 0))} ₾) = ხელფასები + ზვიადის ჯამური მოგება. ითვლება გადახდის თარიღით.</p>
+      </div>
+
       {/* Dynamic service category stats */}
       <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1 mb-2.5">
         თანხები კატეგორიების მიხედვით
@@ -368,7 +399,7 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
       {/* Mechanic Earnings Rating Section */}
       <div className="flex items-center justify-between pl-1 mb-2.5">
         <h3 className="text-xs font-bold text-slate-500 uppercase tracking-widest pl-1">
-          ხელოსნების გამომუშავება და რეიტინგი
+          ხელოსნების გამომუშავება და რეიტინგი (გადახდილი)
         </h3>
         <Award className="w-4 h-4 text-amber-500" />
       </div>
@@ -422,10 +453,12 @@ export default function ReportsView({ orders, services, mechanics, allUsers }: R
           <span className="text-slate-400">აქტიური პერიოდი:</span>
           <span className="text-slate-200 font-bold bg-slate-950 border border-slate-850 px-2.5 py-1 rounded-lg flex items-center gap-1 uppercase text-[10px]">
             <Clock className="w-3 h-3 text-amber-500" />
-            {activePeriod === 'week' && 'უკანასკნელი 7 დღე'}
-            {activePeriod === 'month' && 'უკანასკნელი 30 დღე'}
-            {activePeriod === 'year' && 'უკანასკნელი 365 დღე'}
-            {activePeriod === 'all' && 'მთლიანი პერიოდი'}
+            {activePeriod === 'day' ? 'დღეს'
+              : activePeriod === 'week' ? 'უკანასკნელი 7 დღე'
+              : activePeriod === 'month' ? 'უკანასკნელი 30 დღე'
+              : activePeriod === 'year' ? 'უკანასკნელი 365 დღე'
+              : activePeriod === 'all' ? 'მთლიანი პერიოდი'
+              : `${formatDateDDMMYYYY(dateFrom) || '...'} — ${formatDateDDMMYYYY(dateTo) || '...'}`}
           </span>
         </div>
         <div className="flex justify-between items-center py-1 bg-slate-950/40 rounded px-2">

@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { User } from '../types';
 import { hashPassword } from '../utils/crypto';
-import { KeyRound, User as UserIcon, AlertTriangle, Car } from 'lucide-react';
+import { KeyRound, User as UserIcon, AlertTriangle } from 'lucide-react';
 import { motion } from 'motion/react';
 
 interface LoginViewProps {
@@ -54,11 +54,9 @@ export default function LoginView({ users, onLogin }: LoginViewProps) {
         className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl"
       >
         <div className="flex flex-col items-center mb-7">
-          <div className="bg-amber-500/10 p-4 rounded-full border border-amber-500/20 text-amber-500 mb-3">
-            <Car className="w-9 h-9" />
-          </div>
+          <img src="/autoservice.github.io/logo.png" alt="PIT Service" className="w-20 h-20 rounded-2xl mb-3 shadow-lg" />
           <h2 className="text-2xl font-black font-sans tracking-tight text-slate-50 text-center">
-            ავტოსერვისი
+            PIT Service
           </h2>
           <p className="text-slate-500 text-xs mt-1 text-center font-sans">
             სისტემაში შესვლა
