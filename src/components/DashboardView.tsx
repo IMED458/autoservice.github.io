@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { CarServiceOrder, User, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS, isAdminRole, isAssignableMechanic } from '../types';
+import React from 'react';
+import { CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, PAYMENT_STATE_LABELS, getOrderPaymentSummary, isAdminRole, isAssignableMechanic } from '../types';
 import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
 import DateField from './DateField';
 import { Plus, Search, Car, HelpCircle, Phone, User as UserIcon, Calendar, ArrowRight } from 'lucide-react';
@@ -12,8 +12,17 @@ function formatPlate(raw: string): string {
   return `${clean.slice(0, 2)}-${clean.slice(2, 5)}-${clean.slice(5)}`;
 }
 
+export interface DashboardFilters {
+  search: string;
+  status: string;
+  day: string;
+}
+
 interface DashboardViewProps {
   orders: CarServiceOrder[];
+  services: ServiceItem[];
+  filters: DashboardFilters;
+  onFiltersChange: (f: DashboardFilters) => void;
   currentUser: User;
   allUsers: User[];
   onSelectOrder: (id: string) => void;
@@ -22,12 +31,13 @@ interface DashboardViewProps {
 
 interface OrderCardProps {
   order: CarServiceOrder;
+  services: ServiceItem[];
   allUsers: User[];
   onSelectOrder: (id: string) => void;
   highlight?: boolean;
 }
 
-function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps) {
+function OrderCard({ order, services, allUsers, onSelectOrder, highlight }: OrderCardProps) {
   const statusStyle =
     order.status === 'new'
       ? { bg: 'bg-amber-950/50', border: 'border-amber-500/30', text: 'text-amber-400', bar: 'bg-amber-500' }
@@ -35,9 +45,12 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
       ? { bg: 'bg-sky-950/50', border: 'border-sky-500/30', text: 'text-sky-400', bar: 'bg-sky-500' }
       : { bg: 'bg-green-950/50', border: 'border-green-500/30', text: 'text-green-400', bar: 'bg-green-500' };
 
+  const pay = getOrderPaymentSummary(order, services);
   const payStyle =
-    order.paymentStatus === 'paid'
+    pay.state === 'paid'
       ? 'bg-green-500/20 text-green-400 border-green-500/20'
+      : pay.state === 'partial'
+      ? 'bg-amber-500/20 text-amber-400 border-amber-500/20'
       : 'bg-rose-500/20 text-rose-400 border-rose-500/20';
 
   const assignees = (order.assignedEmployeeIds || [])
@@ -81,6 +94,26 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
         <p className="text-xs line-clamp-2 font-sans text-slate-300 break-words">{order.problemDescription}</p>
       </div>
 
+      {pay.total > 0 && (
+        <div className={`mx-1 mb-3 rounded-xl border px-3 py-2 flex items-center justify-between gap-2 ${
+          pay.remaining > 0 ? 'bg-rose-950/30 border-rose-500/30' : 'bg-green-950/30 border-green-500/30'
+        }`}>
+          <div className="min-w-0">
+            <span className={`block text-[10px] font-bold ${pay.remaining > 0 ? 'text-rose-300' : 'text-green-300'}`}>
+              {pay.remaining > 0 ? 'გადასახდელი' : 'გადახდილია სრულად'}
+            </span>
+            {pay.state === 'partial' && (
+              <span className="block text-[10px] text-slate-400 font-mono">
+                გადახდილი {pay.paid} ₾ / ჯამი {pay.total} ₾
+              </span>
+            )}
+          </div>
+          <span className={`font-mono font-black text-lg whitespace-nowrap ${pay.remaining > 0 ? 'text-rose-400' : 'text-green-400'}`}>
+            {pay.remaining > 0 ? pay.remaining : pay.total} ₾
+          </span>
+        </div>
+      )}
+
       {assignees.length > 0 && (
         <div className="flex items-center gap-1 flex-wrap mb-2.5 pl-2">
           {assignees.map(u => (
@@ -97,7 +130,7 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
             {ORDER_STATUS_LABELS[order.status]}
           </span>
           <span className={`text-[10px] uppercase tracking-wider font-extrabold px-2.5 py-1 rounded-lg border whitespace-nowrap ${payStyle}`}>
-            {PAYMENT_STATUS_LABELS[order.paymentStatus]}
+            {PAYMENT_STATE_LABELS[pay.state]}
           </span>
         </div>
         <span className="text-amber-500 text-xs font-semibold flex items-center gap-0.5 hover:text-amber-400 flex-shrink-0">
@@ -110,14 +143,18 @@ function OrderCard({ order, allUsers, onSelectOrder, highlight }: OrderCardProps
 
 export default function DashboardView({
   orders,
+  services,
+  filters,
+  onFiltersChange,
   currentUser,
   allUsers,
   onSelectOrder,
   onOpenAddOrder,
 }: DashboardViewProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all_active');
-  const [filterDay, setFilterDay] = useState('');
+  const { search: searchQuery, status: selectedStatusFilter, day: filterDay } = filters;
+  const setSearchQuery = (search: string) => onFiltersChange({ ...filters, search });
+  const setSelectedStatusFilter = (status: string) => onFiltersChange({ ...filters, status });
+  const setFilterDay = (day: string) => onFiltersChange({ ...filters, day });
 
   // "My Tasks": orders explicitly assigned to current user that are not completed
   const canHaveAssignedTasks = isAssignableMechanic(currentUser);
@@ -142,7 +179,7 @@ export default function DashboardView({
     if (selectedStatusFilter === 'my-tasks')
       return canHaveAssignedTasks && (order.assignedEmployeeIds || []).includes(currentUser.id) && order.status !== 'completed';
     if (selectedStatusFilter === 'all_active') return order.status === 'new' || order.status === 'pending';
-    if (selectedStatusFilter === 'unpaid') return order.paymentStatus === 'unpaid';
+    if (selectedStatusFilter === 'unpaid') return getOrderPaymentSummary(order, services).state !== 'paid';
     if (selectedStatusFilter === 'all') return true;
     return order.status === selectedStatusFilter;
   });
@@ -269,6 +306,7 @@ export default function DashboardView({
             <React.Fragment key={order.id}>
               <OrderCard
                 order={order}
+                services={services}
                 allUsers={allUsers}
                 onSelectOrder={onSelectOrder}
                 highlight={selectedStatusFilter === 'my-tasks'}
