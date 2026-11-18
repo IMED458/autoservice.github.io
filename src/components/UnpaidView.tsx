@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useViewState } from '../utils/viewState';
 import {
   CarServiceOrder, User, ServiceItem, ServiceTypeConfig, ORDER_STATUS_LABELS, PAYMENT_STATE_LABELS, getOrderPaymentSummary,
   findOwnerId, getCompletedDate, getServiceShares, getUserServiceEarning, isAdminRole, isServiceParticipant,
@@ -21,8 +21,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Unpaid cars and the wages that will accrue once they are paid */
 export default function UnpaidView({ orders, services, allUsers, currentUser, serviceConfigs, onSelectOrder }: UnpaidViewProps) {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useViewState('unpaid.from', '');
+  const [dateTo, setDateTo] = useViewState('unpaid.to', '');
   const seeAll = isAdminRole(currentUser.role);
   const ownerId = findOwnerId(allUsers);
   const userName = (id: string) => {

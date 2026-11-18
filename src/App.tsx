@@ -25,6 +25,7 @@ import StoreView from './components/StoreView';
 import DayClosingSection from './components/DayClosingSection';
 import SettingsView from './components/SettingsView';
 import UnpaidView from './components/UnpaidView';
+import { clearViewState } from './utils/viewState';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -237,7 +238,7 @@ export default function App() {
   }, [currentUser?.id]);
 
   const handleLogin = (user: User) => setCurrentUser(user);
-  const handleLogout = () => { setCurrentUser(null); setDashboardFilters({ search: '', status: 'all_active', day: '' }); setSelectedOrderId(null); setActiveView('regular-tab'); };
+  const handleLogout = () => { clearViewState(); setCurrentUser(null); setDashboardFilters({ search: '', status: 'all_active', day: '' }); setSelectedOrderId(null); setActiveView('regular-tab'); };
   const handleOpenAddOrder = () => setActiveView('register-car');
 
   const handleSelectOrder = (id: string) => {

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { useViewState } from '../utils/viewState';
 import {
   CarServiceOrder, User, ServiceItem, ORDER_STATUS_LABELS, ServiceTypeConfig, isOwnerLike, isAssignableMechanic,
   findOwnerId, getPaidDate, getServiceShares, getUserServiceEarning, isServiceParticipant, splitServiceMoney, formatSharePct,
@@ -42,8 +43,8 @@ function OwnerProfitView({
   serviceConfigs,
   onSelectOrder,
 }: Omit<MechanicPanelViewProps, 'currentUser'>) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useViewState('ownerProfit.from', '');
+  const [endDate, setEndDate] = useViewState('ownerProfit.to', '');
 
   const ownerId = findOwnerId(allUsers);
   const ownerUser = allUsers.find(u => u.id === ownerId);
@@ -254,8 +255,8 @@ function EmployeeEarningsView({
   serviceConfigs,
   onSelectOrder,
 }: Omit<MechanicPanelViewProps, 'allUsers'>) {
-  const [startDate, setStartDate] = useState('');
-  const [endDate, setEndDate] = useState('');
+  const [startDate, setStartDate] = useViewState('earnings.from', '');
+  const [endDate, setEndDate] = useViewState('earnings.to', '');
 
   const mechanicServices = services.filter(s => isServiceParticipant(s, currentUser.id));
 
