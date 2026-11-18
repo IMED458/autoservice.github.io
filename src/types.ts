@@ -32,6 +32,15 @@ export interface CarServiceOrder {
   updatedAt: string;
   assignedEmployeeIds?: string[];   // employees assigned to this order
   assignedServiceType?: string;     // optional service type hint at registration
+  payments?: OrderPayment[];        // partial / full payments made by the client
+}
+
+export interface OrderPayment {
+  id: string;
+  amount: number;
+  date: string;                     // YYYY-MM-DD
+  paidTo: string;
+  createdAt: string;
 }
 
 export type ServiceType = string;
@@ -389,4 +398,57 @@ export function getPaidDate(order: Pick<CarServiceOrder, 'paymentStatus' | 'paid
 export function getCompletedDate(order: Pick<CarServiceOrder, 'status' | 'completedAt' | 'updatedAt'>): string | null {
   if (order.status !== 'completed') return null;
   return (order.completedAt || order.updatedAt || '').slice(0, 10) || null;
+}
+
+export interface OrderPaymentSummary {
+  total: number;
+  paid: number;
+  remaining: number;
+  state: 'paid' | 'partial' | 'unpaid';
+}
+
+const r2p = (n: number) => Math.round(n * 100) / 100;
+
+/** How much of an order is paid / still due. Legacy fully-paid orders (no payment records) count as fully paid. */
+export function getOrderPaymentSummary(
+  order: Pick<CarServiceOrder, 'id' | 'paymentStatus' | 'payments'>,
+  services: Pick<ServiceItem, 'orderId' | 'price'>[],
+  servicesAreForOrder = false,
+): OrderPaymentSummary {
+  const srvs = servicesAreForOrder ? services : services.filter(s => s.orderId === order.id);
+  const total = r2p(srvs.reduce((a, s) => a + (Number(s.price) || 0), 0));
+  const hasRecords = (order.payments?.length || 0) > 0;
+  const paid = hasRecords
+    ? r2p(order.payments!.reduce((a, p) => a + (Number(p.amount) || 0), 0))
+    : order.paymentStatus === 'paid' ? total : 0;
+  const remaining = r2p(Math.max(total - paid, 0));
+  const state: OrderPaymentSummary['state'] = order.paymentStatus === 'paid' && (!hasRecords || remaining === 0)
+    ? 'paid'
+    : paid > 0 ? 'partial' : 'unpaid';
+  return { total, paid, remaining, state };
+}
+
+export const PAYMENT_STATE_LABELS: Record<OrderPaymentSummary['state'], string> = {
+  paid: 'გადახდილია სრულად',
+  partial: 'ნაწილობრივ გადახდილი',
+  unpaid: 'გადაუხდელია',
+};
+
+/** Derive paymentStatus / paidAt / paidTo from the payment records. Full payment ⇒ 'paid' on the date it was completed. */
+export function applyOrderPayments<T extends CarServiceOrder>(order: T, payments: OrderPayment[], total: number): T {
+  if (payments.length === 0) {
+    const { payments: _p, ...rest } = order;
+    return { ...(rest as T), paymentStatus: 'unpaid', paidAt: undefined, paidTo: undefined };
+  }
+  const sorted = [...payments].sort((a, b) => (a.date + a.createdAt).localeCompare(b.date + b.createdAt));
+  const paidSum = r2p(sorted.reduce((a, p) => a + (Number(p.amount) || 0), 0));
+  const full = total > 0 && paidSum >= total;
+  const last = sorted[sorted.length - 1];
+  return {
+    ...order,
+    payments: sorted,
+    paymentStatus: full ? 'paid' : 'unpaid',
+    paidAt: full ? last.date : undefined,
+    paidTo: full ? last.paidTo : undefined,
+  };
 }

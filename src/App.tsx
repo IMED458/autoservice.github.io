@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import {
   User, CarServiceOrder, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, Product, ProductSale, DailyClosing, CarBrand,
-  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, PAID_TO_OPTIONS, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic,
+  DEFAULT_SERVICE_CONFIGS, DEFAULT_CAR_BRANDS, PAID_TO_OPTIONS, applyOrderPayments, hasModule, isAdminRole, isOwnerLike, isAssignableMechanic,
 } from './types';
 import { INITIAL_USERS, INITIAL_ORDERS, INITIAL_SERVICES } from './utils/initialData';
 import { db } from './firebase';
@@ -14,7 +14,7 @@ import {
 import Header from './components/Header';
 import BottomNav from './components/BottomNav';
 import LoginView from './components/LoginView';
-import DashboardView from './components/DashboardView';
+import DashboardView, { DashboardFilters } from './components/DashboardView';
 import OrderFormView from './components/OrderFormView';
 import OrderDetailsView from './components/OrderDetailsView';
 import HistoryView from './components/HistoryView';
@@ -25,6 +25,7 @@ import StoreView from './components/StoreView';
 import DayClosingSection from './components/DayClosingSection';
 import SettingsView from './components/SettingsView';
 import UnpaidView from './components/UnpaidView';
+import { clearViewState } from './utils/viewState';
 
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -92,6 +93,8 @@ export default function App() {
   const [activeView, setActiveView] = useState<'regular-tab' | 'register-car' | 'order-detail'>('regular-tab');
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  // Dashboard filters live here so they survive opening an order and coming back
+  const [dashboardFilters, setDashboardFilters] = useState<DashboardFilters>({ search: '', status: 'all_active', day: '' });
 
   const initDone = useRef(false);
 
@@ -235,7 +238,7 @@ export default function App() {
   }, [currentUser?.id]);
 
   const handleLogin = (user: User) => setCurrentUser(user);
-  const handleLogout = () => { setCurrentUser(null); setSelectedOrderId(null); setActiveView('regular-tab'); };
+  const handleLogout = () => { clearViewState(); setCurrentUser(null); setDashboardFilters({ search: '', status: 'all_active', day: '' }); setSelectedOrderId(null); setActiveView('regular-tab'); };
   const handleOpenAddOrder = () => setActiveView('register-car');
 
   const handleSelectOrder = (id: string) => {
@@ -291,11 +294,16 @@ export default function App() {
         }
         return legacyOk ? s : { ...s, coMechanicId: undefined, coMechanicEarning: undefined };
       });
-    const paidTo = normalizePaidToName(updatedOrder.paidTo);
+    // Partial payments: the order counts as paid only once the payments cover the full total
+    const orderTotal = sanitizedServices.reduce((a, s) => a + (Number(s.price) || 0), 0);
+    const pricedOrder = updatedOrder.payments?.length
+      ? applyOrderPayments(updatedOrder, updatedOrder.payments, orderTotal)
+      : updatedOrder;
+    const paidTo = normalizePaidToName(pricedOrder.paidTo);
     const safeOrder: CarServiceOrder = {
-      ...updatedOrder,
-      assignedEmployeeIds: (updatedOrder.assignedEmployeeIds || []).filter(id => assignableWorkerIds.includes(id)),
-      paidTo: updatedOrder.paymentStatus === 'paid' ? (paidTo && PAID_TO_OPTIONS.includes(paidTo) ? paidTo : 'ზვიადი') : undefined,
+      ...pricedOrder,
+      assignedEmployeeIds: (pricedOrder.assignedEmployeeIds || []).filter(id => assignableWorkerIds.includes(id)),
+      paidTo: pricedOrder.paymentStatus === 'paid' ? (paidTo && PAID_TO_OPTIONS.includes(paidTo) ? paidTo : 'ზვიადი') : undefined,
     };
 
     const nowIso = new Date().toISOString();
@@ -453,6 +461,9 @@ export default function App() {
                   {currentTab === 'dashboard' && (
                     <DashboardView
                       orders={orders}
+                      services={services}
+                      filters={dashboardFilters}
+                      onFiltersChange={setDashboardFilters}
                       currentUser={currentUser}
                       allUsers={users}
                       onSelectOrder={handleSelectOrder}
@@ -536,6 +547,9 @@ export default function App() {
                   {currentTab === 'all-orders' && (
                     <DashboardView
                       orders={orders}
+                      services={services}
+                      filters={dashboardFilters}
+                      onFiltersChange={setDashboardFilters}
                       currentUser={currentUser}
                       allUsers={users}
                       onSelectOrder={handleSelectOrder}

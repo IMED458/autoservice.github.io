@@ -3,10 +3,10 @@ import {
   CarServiceOrder, User, ServiceItem, OrderStatus, PaymentStatus,
   ServiceTypeConfig, calculateMechanicEarning, buildServiceShares, getFixedCoMechanic, getFixedCoEarning,
   getServiceHelpers, getServiceShares, findOwnerId, formatSharePct, HelperDraft, PAID_TO_OPTIONS,
-  ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
+  ORDER_STATUS_LABELS, PAYMENT_STATE_LABELS, OrderPayment, applyOrderPayments, getOrderPaymentSummary,
   isAdminRole, isOwnerLike, isAssignableMechanic,
 } from '../types';
-import { Wrench, User as UserIcon, Phone, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X, Lock, CloudCheck, CloudUpload, CloudAlert } from 'lucide-react';
+import { Wrench, Calendar, Plus, Trash2, Check, Edit, Save, ArrowLeft, Settings, UserPlus, X, Lock, CloudCheck, CloudUpload, CloudAlert, Wallet } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { formatDateDDMMYYYY, toISODateInputValue } from '../utils/date';
 import DateField from './DateField';
@@ -339,6 +339,36 @@ export default function OrderDetailsView({
 
   const paidToOptions = PAID_TO_OPTIONS.map(label => ({ id: label, label }));
 
+  // ── Payments (full or partial) ──────────────────
+  const paySummary = getOrderPaymentSummary(draftOrder, draftServices, true);
+  const payRecords = draftOrder.payments || [];
+  const isLegacyPaid = payRecords.length === 0 && draftOrder.paymentStatus === 'paid';
+  const [payAmount, setPayAmount] = useState('');
+  const [payDate, setPayDate] = useState(toISODateInputValue());
+  const [payTo, setPayTo] = useState(PAID_TO_OPTIONS[0]);
+  const [payError, setPayError] = useState('');
+
+  const addPayment = (amount: number) => {
+    setPayError('');
+    const amt = Math.round(amount * 100) / 100;
+    if (!(amt > 0)) { setPayError('მიუთითეთ თანხა'); return; }
+    if (amt > paySummary.remaining + 0.001) { setPayError(`თანხა აღემატება დარჩენილს (${paySummary.remaining} ₾)`); return; }
+    const p: OrderPayment = {
+      id: `pay-${Date.now()}`,
+      amount: amt,
+      date: payDate || toISODateInputValue(),
+      paidTo: payTo,
+      createdAt: new Date().toISOString(),
+    };
+    setDraftOrder(prev => applyOrderPayments(prev, [...(prev.payments || []), p], totalCost));
+    setPayAmount('');
+  };
+
+  const removePayment = (id: string) => {
+    if (!confirm('წაიშალოს ეს გადახდა?')) return;
+    setDraftOrder(prev => applyOrderPayments(prev, (prev.payments || []).filter(p => p.id !== id), totalCost));
+  };
+
   const autoSaveBadge = (
     <span className={`text-[10px] flex items-center gap-1 ${autoSaveState === 'error' ? 'text-rose-400' : autoSaveState === 'saved' ? 'text-emerald-400' : 'text-slate-500'}`}>
       {autoSaveState === 'error' ? <><CloudAlert className="w-3 h-3" /> ავტომატური შენახვა ვერ მოხერხდა</>
@@ -465,6 +495,132 @@ export default function OrderDetailsView({
             )}
           </div>
 
+          {/* Payment card */}
+          <div className={`bg-slate-900 border-2 rounded-2xl p-4 shadow-lg space-y-3 ${
+            paySummary.state === 'paid' ? 'border-green-500/40' : paySummary.state === 'partial' ? 'border-amber-500/40' : 'border-rose-500/40'
+          }`}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2 gap-2">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                <Wallet className="w-4 h-4 text-amber-400" /> გადახდა
+              </h3>
+              <span className={`text-[10px] font-extrabold px-2.5 py-1 rounded-lg border whitespace-nowrap ${
+                paySummary.state === 'paid' ? 'bg-green-500/20 text-green-400 border-green-500/20'
+                  : paySummary.state === 'partial' ? 'bg-amber-500/20 text-amber-400 border-amber-500/20'
+                  : 'bg-rose-500/20 text-rose-400 border-rose-500/20'
+              }`}>{PAYMENT_STATE_LABELS[paySummary.state]}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-2">
+                <span className="block text-[10px] text-slate-500 font-bold">ჯამი</span>
+                <span className="block font-mono font-black text-slate-100">{paySummary.total} ₾</span>
+              </div>
+              <div className="bg-slate-950 border border-slate-800 rounded-xl p-2">
+                <span className="block text-[10px] text-slate-500 font-bold">გადახდილი</span>
+                <span className="block font-mono font-black text-green-400">{paySummary.paid} ₾</span>
+              </div>
+              <div className={`rounded-xl p-2 border ${paySummary.remaining > 0 ? 'bg-rose-950/40 border-rose-500/40' : 'bg-slate-950 border-slate-800'}`}>
+                <span className="block text-[10px] text-slate-400 font-bold">გადასახდელი</span>
+                <span className={`block font-mono font-black text-lg leading-tight ${paySummary.remaining > 0 ? 'text-rose-400' : 'text-slate-400'}`}>{paySummary.remaining} ₾</span>
+              </div>
+            </div>
+
+            {paySummary.total > 0 && (
+              <div className="h-2 bg-slate-950 rounded-full overflow-hidden border border-slate-800">
+                <div className={`h-full ${paySummary.remaining > 0 ? 'bg-amber-500' : 'bg-green-500'}`}
+                  style={{ width: `${Math.min(100, (paySummary.paid / paySummary.total) * 100)}%` }} />
+              </div>
+            )}
+
+            {payRecords.length > 0 && (
+              <div className="space-y-1.5">
+                <span className="block text-[10px] text-slate-500 font-bold uppercase">გადახდების ისტორია</span>
+                {payRecords.map(p => (
+                  <div key={p.id} className="flex items-center justify-between gap-2 bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
+                    <div className="min-w-0">
+                      <span className="font-mono text-slate-300">{formatDateDDMMYYYY(p.date)}</span>
+                      <span className="text-slate-500"> · {p.paidTo}</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <b className="font-mono text-green-400">{p.amount} ₾</b>
+                      {!isMechanic && (
+                        <button type="button" onClick={() => removePayment(p.id)}
+                          className="p-1 border border-red-500/20 bg-red-950/20 text-red-400 rounded-md cursor-pointer">
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {isLegacyPaid && (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
+                <label className="block text-[10px] text-amber-500 uppercase font-bold">ვისთან მოხდა გადახდა?</label>
+                <select disabled={isMechanic} value={draftOrder.paidTo && PAID_TO_OPTIONS.includes(draftOrder.paidTo) ? draftOrder.paidTo : paidToOptions[0].label}
+                  onChange={e => setDraftOrder(prev => ({ ...prev, paidTo: e.target.value }))}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
+                  {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
+                </select>
+                <label className="block text-[10px] text-amber-500 uppercase font-bold pt-1.5">გადახდის თარიღი</label>
+                <DateField value={(draftOrder.paidAt || draftOrder.date || '').slice(0, 10)} disabled={isMechanic}
+                  onChange={d => d && setDraftOrder(prev => ({ ...prev, paidAt: d }))}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50 disabled:opacity-60" />
+                <p className="text-[10px] text-slate-500">ხელფასები დაირიცხება ამ თარიღით.</p>
+                {!isMechanic && (
+                  <button type="button"
+                    onClick={() => { if (confirm('მოინიშნოს გადაუხდელად?')) setDraftOrder(prev => ({ ...prev, paymentStatus: 'unpaid', paidAt: undefined, paidTo: undefined })); }}
+                    className="w-full mt-1 py-1.5 bg-rose-950/30 border border-rose-500/30 text-rose-300 rounded-lg text-xs font-bold cursor-pointer">
+                    გადაუხდელად მონიშვნა
+                  </button>
+                )}
+              </div>
+            )}
+
+            {isMechanic && !isLegacyPaid && paySummary.remaining > 0 && (
+              <p className="text-[10px] text-slate-500">გადახდის დაფიქსირება შეუძლია მხოლოდ ადმინისტრაციას.</p>
+            )}
+
+            {!isMechanic && !isLegacyPaid && paySummary.remaining > 0 && (
+              <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-2">
+                <span className="block text-[10px] text-amber-500 uppercase font-bold">გადახდის დამატება</span>
+                {payError && <div className="p-2 bg-red-950/40 border border-red-500/20 text-red-400 text-[11px] rounded-lg">{payError}</div>}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">თანხა (₾)</label>
+                    <input type="number" inputMode="decimal" value={payAmount} onChange={e => setPayAmount(e.target.value)}
+                      placeholder={String(paySummary.remaining)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 font-mono" />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] text-slate-400 mb-0.5">ვისთან</label>
+                    <select value={payTo} onChange={e => setPayTo(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-slate-200">
+                      {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-slate-400 mb-0.5">თარიღი</label>
+                  <DateField value={payDate} onChange={d => d && setPayDate(d)}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200" />
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button type="button" onClick={() => addPayment(Number(payAmount))}
+                    className="py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center gap-1">
+                    <Plus className="w-3.5 h-3.5" /> ნაწილობრივ
+                  </button>
+                  <button type="button" onClick={() => addPayment(paySummary.remaining)}
+                    className="py-2 bg-green-500 hover:bg-green-600 text-slate-950 rounded-lg text-xs font-bold cursor-pointer flex items-center justify-center gap-1">
+                    <Check className="w-3.5 h-3.5" /> სრულად ({paySummary.remaining} ₾)
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500">ხელფასები დაირიცხება სრული გადახდის თარიღით.</p>
+              </div>
+            )}
+          </div>
+
           {/* Status Controls */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-lg space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-b border-slate-800 pb-2">შეკვეთის მართვა</h3>
@@ -486,46 +642,7 @@ export default function OrderDetailsView({
                   ))}
                 </div>
               </div>
-              <div className="min-w-0">
-                <span className="block text-[10px] text-slate-500 font-bold uppercase mb-1.5">
-                  გადახდა {isMechanic && '(მხოლოდ ადმინი)'}:
-                </span>
-                <div className="grid grid-cols-2 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 overflow-hidden">
-                  {(['unpaid', 'paid'] as PaymentStatus[]).map(pay => (
-                    <button key={pay} disabled={isMechanic}
-                      onClick={() => setDraftOrder(prev => ({
-                        ...prev, paymentStatus: pay,
-                        paidTo: pay === 'paid' ? (prev.paidTo && PAID_TO_OPTIONS.includes(prev.paidTo) ? prev.paidTo : paidToOptions[0].label) : undefined,
-                        paidAt: pay === 'paid' ? (prev.paymentStatus === 'paid' ? prev.paidAt : toISODateInputValue()) : undefined,
-                      }))}
-                      className={`min-w-0 px-1 py-2 text-[10px] leading-tight font-bold rounded-lg transition-all whitespace-normal break-words text-center ${isMechanic ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'} ${
-                        draftOrder.paymentStatus === pay
-                          ? pay === 'paid' ? 'bg-green-500 text-slate-950' : 'bg-rose-500 text-slate-100'
-                          : 'text-slate-400 hover:text-slate-200'
-                      }`}>
-                      {PAYMENT_STATUS_LABELS[pay]}
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
-
-            {draftOrder.paymentStatus === 'paid' && (
-              <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-950 p-3 rounded-xl border border-slate-800 space-y-1.5">
-                <label className="block text-[10px] text-amber-500 uppercase font-bold">ვისთან მოხდა გადახდა?</label>
-                <select disabled={isMechanic} value={draftOrder.paidTo && PAID_TO_OPTIONS.includes(draftOrder.paidTo) ? draftOrder.paidTo : paidToOptions[0].label}
-                  onChange={e => setDraftOrder(prev => ({ ...prev, paidTo: e.target.value }))}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50">
-                  {paidToOptions.map(opt => <option key={opt.id} value={opt.label}>{opt.label}</option>)}
-                </select>
-                <label className="block text-[10px] text-amber-500 uppercase font-bold pt-1.5">გადახდის თარიღი</label>
-                <DateField value={(draftOrder.paidAt || draftOrder.date || '').slice(0, 10)} disabled={isMechanic}
-                  onChange={d => d && setDraftOrder(prev => ({ ...prev, paidAt: d }))}
-                  className="w-full bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500/50 disabled:opacity-60" />
-                <p className="text-[10px] text-slate-500">ხელფასები დაირიცხება ამ თარიღით.</p>
-              </motion.div>
-            )}
           </div>
 
           {/* Assigned Employees (admin can change) */}

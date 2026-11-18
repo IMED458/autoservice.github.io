@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useViewState } from '../utils/viewState';
 import {
-  CarServiceOrder, User, ServiceItem, ServiceTypeConfig, ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
+  CarServiceOrder, User, ServiceItem, ServiceTypeConfig, ORDER_STATUS_LABELS, PAYMENT_STATE_LABELS, getOrderPaymentSummary,
   findOwnerId, getCompletedDate, getServiceShares, getUserServiceEarning, isAdminRole, isServiceParticipant,
   splitServiceMoney, formatSharePct,
 } from '../types';
@@ -21,8 +21,8 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Unpaid cars and the wages that will accrue once they are paid */
 export default function UnpaidView({ orders, services, allUsers, currentUser, serviceConfigs, onSelectOrder }: UnpaidViewProps) {
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [dateFrom, setDateFrom] = useViewState('unpaid.from', '');
+  const [dateTo, setDateTo] = useViewState('unpaid.to', '');
   const seeAll = isAdminRole(currentUser.role);
   const ownerId = findOwnerId(allUsers);
   const userName = (id: string) => {
@@ -38,7 +38,7 @@ export default function UnpaidView({ orders, services, allUsers, currentUser, se
     .filter(x => seeAll || x.srvs.some(s => isServiceParticipant(s, currentUser.id)))
     .sort((a, b) => (b.order.date || '').localeCompare(a.order.date || ''));
 
-  const totalDue = r2(unpaidOrders.reduce((a, x) => a + x.srvs.reduce((b, s) => b + s.price, 0), 0));
+  const totalDue = r2(unpaidOrders.reduce((a, x) => a + getOrderPaymentSummary(x.order, x.srvs, true).remaining, 0));
   const myExpected = r2(unpaidOrders.reduce((a, x) => a + x.srvs.reduce((b, s) =>
     b + (currentUser.id === ownerId ? splitServiceMoney(s, ownerId).ownerTotal : getUserServiceEarning(s, currentUser.id, ownerId)), 0), 0));
 
@@ -119,7 +119,7 @@ export default function UnpaidView({ orders, services, allUsers, currentUser, se
           <div className="p-6 text-center text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800 text-xs">გადაუხდელი ავტომობილები არ არის</div>
         )}
         {unpaidOrders.map(({ order, srvs }) => {
-          const orderTotal = r2(srvs.reduce((a, s) => a + s.price, 0));
+          const pay = getOrderPaymentSummary(order, srvs, true);
           const myShare = r2(srvs.reduce((a, s) => a + (currentUser.id === ownerId ? splitServiceMoney(s, ownerId).ownerTotal : getUserServiceEarning(s, currentUser.id, ownerId)), 0));
           const completed = getCompletedDate(order);
           return (
@@ -161,11 +161,12 @@ export default function UnpaidView({ orders, services, allUsers, currentUser, se
               </div>
               <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-800/40 text-[11px]">
                 <div className="flex gap-1.5 flex-wrap">
-                  <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-400 border border-rose-500/20 font-bold">{PAYMENT_STATUS_LABELS[order.paymentStatus]}</span>
+                  <span className={`px-2 py-0.5 rounded font-bold border ${pay.state === 'partial' ? 'bg-amber-500/20 text-amber-400 border-amber-500/20' : 'bg-rose-500/20 text-rose-400 border-rose-500/20'}`}>{PAYMENT_STATE_LABELS[pay.state]}</span>
                   <span className="px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-slate-300 font-bold">{ORDER_STATUS_LABELS[order.status]}</span>
                 </div>
                 <div className="text-right font-mono">
-                  {seeAll && <div className="text-slate-200">გადასახდელი: <b>{orderTotal} ₾</b></div>}
+                  <div className="text-rose-300">გადასახდელი: <b>{pay.remaining} ₾</b></div>
+                  {pay.paid > 0 && <div className="text-[10px] text-slate-400">გადახდილი {pay.paid} / {pay.total} ₾</div>}
                   <div className="text-amber-400 font-bold">ჩემი: {myShare} ₾</div>
                 </div>
               </div>

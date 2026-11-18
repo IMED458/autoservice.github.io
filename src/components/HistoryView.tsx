@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useViewState } from '../utils/viewState';
 import {
   CarServiceOrder, User, ServiceItem, ServiceTypeConfig,
   ORDER_STATUS_LABELS, PAYMENT_STATUS_LABELS,
@@ -25,13 +25,13 @@ interface HistoryViewProps {
 }
 
 export default function HistoryView({ orders, services, mechanics, serviceConfigs, onSelectOrder }: HistoryViewProps) {
-  const [filterCarPlate, setFilterCarPlate] = useState('');
-  const [filterClientName, setFilterClientName] = useState('');
-  const [filterDate, setFilterDate] = useState('');
-  const [filterMechanicId, setFilterMechanicId] = useState('');
-  const [filterServiceType, setFilterServiceType] = useState<string>('');
-  const [filterPayment, setFilterPayment] = useState<string>('');
-  const [filterWorkStatus, setFilterWorkStatus] = useState<string>('all');
+  const [filterCarPlate, setFilterCarPlate] = useViewState('history.plate', '');
+  const [filterClientName, setFilterClientName] = useViewState('history.client', '');
+  const [filterDate, setFilterDate] = useViewState('history.date', '');
+  const [filterMechanicId, setFilterMechanicId] = useViewState('history.mechanic', '');
+  const [filterServiceType, setFilterServiceType] = useViewState<string>('history.serviceType', '');
+  const [filterPayment, setFilterPayment] = useViewState<string>('history.payment', '');
+  const [filterWorkStatus, setFilterWorkStatus] = useViewState<string>('history.workStatus', 'all');
 
   const resetFilters = () => {
     setFilterCarPlate('');
